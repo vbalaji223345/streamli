@@ -147,9 +147,9 @@ with input_col:
 
 # Logic to handle either input
 final_prompt = None
-if v_text:
-    final_prompt = v_text
-elif t_text:
+# if v_text:
+#     final_prompt = v_text
+# elif t_text:
     final_prompt = t_text
 
 if final_prompt:
