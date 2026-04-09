@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
-from streamlit_mic_recorder import speech_to_text
 
 # -------------------------
 # 1. Page Configuration
@@ -117,7 +116,7 @@ chat_container = st.container(height=450)
 
 with chat_container:
     if not st.session_state.chat_history:
-        st.info("Chat history is empty. Try typing or speaking below!")
+        st.info("Chat history is empty.")
     else:
         for item in st.session_state.chat_history:
             avatar = "📄" if item.get("source") == "csv" else "🧑‍💻"
@@ -133,15 +132,15 @@ with chat_container:
 # Create a layout for inputs
 input_col, mic_col = st.columns([0.97, 0.08])
 
-with mic_col:
-    # The microphone button. When finished speaking, it returns the text.
-    v_text = speech_to_text(
-        language='en', 
-        start_prompt="🎤", 
-        stop_prompt="🚫", 
-        just_once=True, 
-        key='STT'
-    )
+# with mic_col:
+#     # The microphone button. When finished speaking, it returns the text.
+#     v_text = speech_to_text(
+#         language='en', 
+#         start_prompt="🎤", 
+#         stop_prompt="🚫", 
+#         just_once=True, 
+#         key='STT'
+#     )
 
 with input_col:
     t_text = st.chat_input("Message Violet...")
