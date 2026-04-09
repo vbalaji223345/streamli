@@ -2,104 +2,167 @@ import streamlit as st
 import pandas as pd
 import requests
 import time
-
-st.set_page_config(page_title="BBW Violet local Chatbot", layout="centered")
-st.title("🛀\🧼 BBW Violet local Chatbot")
+from streamlit_mic_recorder import speech_to_text
 
 # -------------------------
-# Model call (REPLACE THIS)
+# 1. Page Configuration
 # -------------------------
-def call_model(prompt: str) -> str:
+st.set_page_config(page_title="BBW Violet Chatbot", page_icon="🛀", layout="centered")
 
-    data={
-        "userId": "test-user-123",
-        "sessionId": "test-session-001",
-        "text": prompt
+# -------------------------
+# 2. Custom CSS
+# -------------------------
+st.markdown("""
+    <style>
+        [data-testid="stChatMessage"] {
+            padding-top: 0.5rem !important;
+            padding-bottom: 0.5rem !important;
         }
-    response=requests.post("https://cognigy-endpoint-na1.nicecxone.com/2f49b31b79a21dade213025fe32b5d7acd78b733cd276dbdc77d943114f86cdb",data=data)
-    return f"Model response for: {response.json()['text']}"
+        .stStatusWidget { display: none !important; }
+        .block-container { padding-top: 2rem !important; }
+        hr { margin: 1em 0px !important; }
+        /* Style the mic button container */
+        .mic-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+    </style>
+""", unsafe_allow_html=True)
 
 # -------------------------
-# Session State
+# 3. Model Logic
+# -------------------------
+def call_model(prompt: str, user_id: str, session_id: str) -> str:
+    try:
+        data = {
+            "userId": user_id,
+            "sessionId": session_id,
+            "text": prompt
+        }
+        response = requests.post(
+            "https://cognigy-endpoint-na1.nicecxone.com/2f49b31b79a21dade213025fe32b5d7acd78b733cd276dbdc77d943114f86cdb",
+            data=data,
+            timeout=15
+        )
+        return response.json().get('text', "No response text found.")
+    except Exception as e:
+        return f"Error connecting to model: {e}"
+
+# -------------------------
+# 4. Session State Initialization
 # -------------------------
 if "chat_history" not in st.session_state:
-    # For UI display (manual + csv)
     st.session_state.chat_history = []
-
 if "results" not in st.session_state:
-    # For downloadable results (mainly csv batch, but can include manual too)
     st.session_state.results = []
-
 if "processing_done" not in st.session_state:
     st.session_state.processing_done = False
-
 if "is_processing" not in st.session_state:
     st.session_state.is_processing = False
 
 # -------------------------
-# Top Controls: Clear Chat
+# 5. SIDEBAR
 # -------------------------
-col_a, col_b = st.columns([1, 3])
+with st.sidebar:
+    st.title("🛀 Violet Controls")
+    
+    st.subheader("BBW User details")
+    u_id = st.text_input("User ID", value="test-user-123")
+    s_id = st.text_input("Session ID", value="test-session-001")
+    
+    st.divider()
 
-with col_a:
-    if st.button("🗑️ Clear Chat"):
+    if st.button("🗑️ Clear All History", use_container_width=True):
         st.session_state.chat_history = []
         st.session_state.results = []
         st.session_state.processing_done = False
         st.session_state.is_processing = False
         st.rerun()
+        
+    st.divider()
+    
+    st.subheader("📄 Batch Processing")
+    uploaded_file = st.file_uploader("Upload CSV", type=["csv"])
+    prompt_col = st.text_input("Column name in CSV", value="prompt")
+    
+    start_clicked = st.button(
+        "▶️ Start Batch Process", 
+        disabled=(uploaded_file is None or st.session_state.is_processing),
+        use_container_width=True,
+        type="primary"
+    )
 
-with col_b:
-    st.caption("Upload CSV + Start for batch prompts, or use manual chat input below.")
-
-st.divider()
-
-# -------------------------
-# CSV Upload + Start
-# -------------------------
-uploaded_file = st.file_uploader("📄 Upload CSV", type=["csv"])
-prompt_col = st.text_input("Prompt column name in CSV", value="prompt")
-
-start_clicked = st.button("▶️ Start CSV Run", disabled=(uploaded_file is None or st.session_state.is_processing))
-
-# Placeholder for progress and live updates
-progress_bar = st.empty()
-status_text = st.empty()
-
-# -------------------------
-# Manual Chat (Input at top-ish)
-# -------------------------
-with st.form("manual_chat_form", clear_on_submit=True):
-    user_input = st.text_input("Type a message (manual):")
-    send_clicked = st.form_submit_button("Send")
-
-if send_clicked and user_input.strip():
-    prompt = user_input.strip()
-    response = call_model(prompt)
-
-    st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response})
-    st.session_state.results.append({"source": "manual", "prompt": prompt, "response": response})
+    status_area = st.empty()
+    progress_bar = st.empty()
+    
+    if st.session_state.processing_done or len(st.session_state.results) > 0:
+        st.divider()
+        res_df = pd.DataFrame(st.session_state.results)
+        st.download_button(
+            label="⬇️ Download Results (CSV)",
+            data=res_df.to_csv(index=False),
+            file_name="violet_responses.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
 # -------------------------
-# Scrollable Chat Display (Below)
+# 6. MAIN WINDOW: UI
 # -------------------------
-chat_box = st.container(height=420)
+st.title("🛀\🧼 BBW Violet local Chatbot")
 
-def render_chat():
-    with chat_box:
-        if not st.session_state.chat_history:
-            st.info("No messages yet. Send a manual message or run CSV batch.")
-        else:
-            for item in st.session_state.chat_history:
-                src = "🧑 Manual" if item["source"] == "manual" else "📄 CSV"
-                st.markdown(f"**{src} Prompt:** {item['prompt']}")
-                st.markdown(f"**🤖 Response:** {item['response']}")
-                st.markdown("---")
+chat_container = st.container(height=450)
 
-render_chat()
+with chat_container:
+    if not st.session_state.chat_history:
+        st.info("Chat history is empty. Try typing or speaking below!")
+    else:
+        for item in st.session_state.chat_history:
+            avatar = "📄" if item.get("source") == "csv" else "🧑‍💻"
+            with st.chat_message("user", avatar=avatar):
+                st.write(item['prompt'])
+            with st.chat_message("assistant", avatar="🤖"):
+                st.write(item['response'])
 
 # -------------------------
-# CSV Batch Processing
+# 7. Input Logic (Text + Voice-to-Text)
+# -------------------------
+
+# Create a layout for inputs
+input_col, mic_col = st.columns([0.97, 0.08])
+
+with mic_col:
+    # The microphone button. When finished speaking, it returns the text.
+    v_text = speech_to_text(
+        language='en', 
+        start_prompt="🎤", 
+        stop_prompt="🚫", 
+        just_once=True, 
+        key='STT'
+    )
+
+with input_col:
+    t_text = st.chat_input("Message Violet...")
+
+# Logic to handle either input
+final_prompt = None
+if v_text:
+    final_prompt = v_text
+elif t_text:
+    final_prompt = t_text
+
+if final_prompt:
+    with st.spinner("Violet is thinking..."):
+        response = call_model(final_prompt, u_id, s_id)
+        
+    st.session_state.chat_history.append({"source": "manual", "prompt": final_prompt, "response": response})
+    st.session_state.results.append({"source": "manual", "prompt": final_prompt, "response": response})
+    st.rerun()
+
+# -------------------------
+# 8. CSV Batch Logic
 # -------------------------
 if start_clicked and uploaded_file is not None:
     st.session_state.is_processing = True
@@ -107,71 +170,27 @@ if start_clicked and uploaded_file is not None:
 
     try:
         df = pd.read_csv(uploaded_file)
-
         if prompt_col not in df.columns:
+            status_area.error(f"Column '{prompt_col}' not found.")
             st.session_state.is_processing = False
-            st.error(f"Column '{prompt_col}' not found in CSV. Available columns: {list(df.columns)}")
-            st.stop()
-
-        total = len(df)
-        if total == 0:
+        else:
+            total = len(df)
+            for i, row in df.iterrows():
+                p = str(row[prompt_col]).strip()
+                if p:
+                    resp = call_model(p, u_id, s_id)
+                    st.session_state.chat_history.append({"source": "csv", "prompt": p, "response": resp})
+                    st.session_state.results.append({"source": "csv", "prompt": p, "response": resp})
+                
+                pct = int(((i + 1) / total) * 100)
+                progress_bar.progress(pct)
+                status_area.info(f"Processing: {i+1}/{total}")
+            
+            st.session_state.processing_done = True
             st.session_state.is_processing = False
-            st.warning("CSV has no rows to process.")
-            st.stop()
-
-        progress = st.progress(0)
-        status_text.info("Starting CSV processing...")
-
-        # Process row by row
-        for i, row in df.iterrows():
-            prompt = str(row[prompt_col]).strip()
-
-            # Skip empty prompts safely
-            if not prompt:
-                continue
-
-            # Call model
-            response = call_model(prompt)
-
-            # Append to UI chat
-            st.session_state.chat_history.append({"source": "csv", "prompt": prompt, "response": response})
-
-            # Append to results (for download)
-            st.session_state.results.append({"source": "csv", "prompt": prompt, "response": response})
-
-            # Update progress + status
-            pct = int(((i + 1) / total) * 100)
-            progress.progress(min(pct, 100))
-            status_text.info(f"Processing CSV row {i+1}/{total}...")
-
-            # Re-render chat so you see updates live
-            render_chat()
-
-            # Small delay to simulate model latency (optional)
-            time.sleep(0.05)
-
-        st.session_state.processing_done = True
-        status_text.success("✅ CSV processing completed.")
-        st.session_state.is_processing = False
+            status_area.success("✅ Batch Complete!")
+            st.rerun()
 
     except Exception as e:
         st.session_state.is_processing = False
-        st.error(f"Error while processing CSV: {e}")
-
-st.divider()
-
-# -------------------------
-# Download Button (Only after CSV completion)
-# -------------------------
-if st.session_state.processing_done:
-    # Download BOTH prompts + responses (includes manual + csv by default)
-    result_df = pd.DataFrame(st.session_state.results)
-
-    st.download_button(
-        label="⬇️ Download Prompts + Responses (CSV)",
-        data=result_df.to_csv(index=False),
-        file_name="prompts_and_responses.csv",
-        mime="text/csv"
-    )
-else:
-    st.caption("Download will appear after CSV execution completes ✅")
+        status_area.error(f"Error: {e}")
