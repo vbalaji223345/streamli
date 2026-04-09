@@ -62,7 +62,7 @@ with st.sidebar:
   
   # New Input Boxes for User and Session ID
   st.subheader("BBW User details")
-  u_id = st.text_input("User ID", value="test-user-123")
+  u_id = st.text_input("User ID", value="test-user-121")
   s_id = st.text_input("Session ID", value="test-session-001")
   
   st.divider()
