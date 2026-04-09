@@ -150,7 +150,7 @@ final_prompt = None
 # if v_text:
 #     final_prompt = v_text
 # elif t_text:
-    final_prompt = t_text
+final_prompt = t_text
 
 if final_prompt:
     with st.spinner("Violet is thinking..."):
