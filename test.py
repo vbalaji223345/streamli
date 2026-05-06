@@ -194,7 +194,7 @@ with st.sidebar:
   
   st.divider()
 
-  if st.button("Generate IDs & Clear History", use_container_width=True):
+  if st.button("Generate Id & Clear chat", use_container_width=True):
     if prefix_input.strip():
       st.session_state.generated_user_id = generate_short_month_id(f"{prefix_input}_U")
       st.session_state.generated_session_id = generate_short_month_id(f"{prefix_input}_S")
