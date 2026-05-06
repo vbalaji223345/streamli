@@ -3,12 +3,9 @@ import pandas as pd
 import requests
 import time
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 def generate_short_month_id(prefix):
-    # Set the timezone to IST (Asia/Kolkata)
-    ist_tz = ZoneInfo("Asia/Kolkata")
-    timestamp = datetime.now(ist_tz).strftime("%b%d%H%M%S")
+    timestamp = datetime.now().strftime("%b%d%H%M%S")
     return f"{prefix}_{timestamp}"
 
 # -------------------------
@@ -28,6 +25,67 @@ st.markdown("""
     .stStatusWidget { display: none !important; }
     .block-container { padding-top: 2rem !important; }
     hr { margin: 1em 0px !important; }
+    .uid-tooltip-wrap {
+      position: relative;
+      display: inline-block;
+    }
+    .uid-info-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 15px;
+      height: 15px;
+      background: #4a9eff;
+      color: white;
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: bold;
+      font-style: normal;
+      cursor: pointer;
+      vertical-align: middle;
+      margin-left: 5px;
+    }
+    .uid-tooltip-text {
+      visibility: hidden;
+      opacity: 0;
+      background: #1e2a3a;
+      color: #e0e0e0;
+      border-radius: 6px;
+      padding: 10px 12px;
+      position: absolute;
+      z-index: 99999;
+      left: 120%;
+      top: -8px;
+      width: 340px;
+      font-size: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .uid-tooltip-text table {
+      border-collapse: collapse;
+      width: 100%;
+    }
+    .uid-tooltip-text th {
+      color: #7ec8ff;
+      padding: 3px 8px;
+      text-align: left;
+      border-bottom: 1px solid #3a4a5a;
+    }
+    .uid-tooltip-text td {
+      padding: 3px 8px;
+      border-bottom: 1px solid #2a3a4a;
+    }
+    .uid-tooltip-text .tt-title {
+      font-weight: bold;
+      color: #7ec8ff;
+      margin-bottom: 6px;
+      display: block;
+    }
+    .uid-tooltip-wrap:hover .uid-tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
   </style>
 """, unsafe_allow_html=True)
 
@@ -86,7 +144,44 @@ with st.sidebar:
     else:
       st.warning("Please enter a prefix first.")
 
-  st.markdown("**User ID**")
+  _uid = st.session_state.generated_user_id
+  if _uid:
+    _ts = _uid.rsplit('_', 1)[-1]   # e.g. "May060851047"
+    _month, _day, _hour, _minute, _second = _ts[:3], _ts[3:5], _ts[5:7], _ts[7:9], _ts[9:11]
+    try:
+      _h = int(_hour)
+      _ampm = "AM" if _h < 12 else "PM"
+      _h12 = _h % 12 or 12
+      _di = int(_day)
+      _sfx = "th" if 11 <= _di <= 13 else ["th","st","nd","rd","th","th","th","th","th","th"][_di % 10]
+      _hour_meaning = f"The hour in 24-hour time ({_h12}:00 {_ampm})"
+      _day_meaning  = f"The day of the month (the {_di}{_sfx})"
+    except Exception:
+      _hour_meaning, _day_meaning = "The hour in 24-hour time", "The day of the month"
+    _month_meaning = f"The month ({_month})"
+  else:
+    _month = _day = _hour = _minute = _second = "—"
+    _month_meaning, _day_meaning, _hour_meaning = "The month", "The day of the month", "The hour in 24-hour time"
+
+  st.markdown(f"""
+  <div style="display:flex; align-items:center; margin-bottom:4px;">
+    <strong>User ID</strong>
+    <span class="uid-tooltip-wrap">
+      <i class="uid-info-icon">i</i>
+      <span class="uid-tooltip-text">
+        <span class="tt-title">Data Breakdown</span>
+        <table>
+          <tr><th>Segment</th><th>Value</th><th>Meaning</th></tr>
+          <tr><td>{_month}</td><td>{_month}</td><td>{_month_meaning}</td></tr>
+          <tr><td>{_day}</td><td>{_day}</td><td>{_day_meaning}</td></tr>
+          <tr><td>{_hour}</td><td>{_hour}</td><td>{_hour_meaning}</td></tr>
+          <tr><td>{_minute}</td><td>{_minute}</td><td>The minute</td></tr>
+          <tr><td>{_second}</td><td>{_second}</td><td>The second</td></tr>
+        </table>
+      </span>
+    </span>
+  </div>
+  """, unsafe_allow_html=True)
   user_id_display = st.empty()
   user_id_display.caption(st.session_state.generated_user_id if st.session_state.generated_user_id else "—")
 
