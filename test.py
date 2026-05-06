@@ -3,9 +3,11 @@ import pandas as pd
 import requests
 import time
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 def generate_short_month_id(prefix):
-    timestamp = datetime.now().strftime("%b%d%H%M%S")
+    ist_tz = ZoneInfo("Asia/Kolkata")
+    timestamp = datetime.now(ist_tz).strftime("%b%d%H%M%S")
     return f"{prefix}_{timestamp}"
 
 # -------------------------
