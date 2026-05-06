@@ -3,12 +3,9 @@ import pandas as pd
 import requests
 import time
 from datetime import datetime
-from zoneinfo import ZoneInfo
 
 def generate_short_month_id(prefix):
-    # Set the timezone to IST (Asia/Kolkata)
-    ist_tz = ZoneInfo("Asia/Kolkata")
-    timestamp = datetime.now(ist_tz).strftime("%b%d%H%M%S")
+    timestamp = datetime.now().strftime("%b%d%H%M%S")
     return f"{prefix}_{timestamp}"
 
 # -------------------------
@@ -196,6 +193,18 @@ with st.sidebar:
   s_id = st.session_state.generated_session_id
   
   st.divider()
+
+  if st.button("Generate IDs & Clear History", use_container_width=True):
+    if prefix_input.strip():
+      st.session_state.generated_user_id = generate_short_month_id(f"{prefix_input}_U")
+      st.session_state.generated_session_id = generate_short_month_id(f"{prefix_input}_S")
+    else:
+      st.warning("Please enter a prefix first.")
+    st.session_state.chat_history = []
+    st.session_state.results = []
+    st.session_state.processing_done = False
+    st.session_state.is_processing = False
+    st.rerun()
 
   if st.button("🗑️ Clear All History", use_container_width=True):
     st.session_state.chat_history = []
