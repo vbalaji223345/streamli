@@ -103,7 +103,7 @@ def call_model(prompt: str, user_id: str, session_id: str) -> str:
       "text": prompt
     }
     response = requests.post(
-      "https://cognigy-endpoint-na1.nicecxone.com/a5f82edf75b1fba8321010c6de0eee01d4d9d672ce6381361682aac5aadfda1e",# new End Point
+      "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953",# new Prod End Point
       data=data,
       timeout=15
     )
