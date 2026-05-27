@@ -1,4 +1,5 @@
 import streamlit as st
+from streamlit.components.v1 import html
 import pandas as pd
 import requests
 import time
@@ -14,7 +15,7 @@ def generate_short_month_id(prefix):
 # 1. Page Configuration
 # -------------------------
 st.set_page_config(page_title="BBW Violet Chatbot", page_icon="🛀", layout="centered", initial_sidebar_state="expanded")
-
+#to hide fork and git hub icons with full hamburger menu
 lock_sidebar_css = """
     <style>
 
@@ -32,6 +33,24 @@ lock_sidebar_css = """
     </style>
 """
 st.markdown(lock_sidebar_css, unsafe_allow_html=True)
+
+#To hide footer
+hide_st_style = """
+    <style>
+    footer { visibility: hidden;}
+    </style>
+"""
+st.markdown(hide_st_style,unsafe_allow_html=True)
+
+html(
+    """
+    <script>
+    window.top.document.querySelectorAll('[href*="streamlit.io"]').forEach(e => e.setAttribute("style", "display: none;"));
+    </script>
+    """,
+    height=0,
+)
+
 # -------------------------
 # 2. Custom CSS
 # -------------------------
