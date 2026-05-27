@@ -22,9 +22,9 @@ hide_github_icon ="""
         display: none !important;
     }
 
-    [data-testid="stToolbar"] {
-        display: none !important;
-    }
+    # [data-testid="stToolbar"] {
+    #     display: none !important;
+    # }
 
     header {
         visibility: hidden !important;
