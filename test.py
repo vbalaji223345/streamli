@@ -18,21 +18,17 @@ st.set_page_config(page_title="BBW Violet Chatbot", page_icon="🛀", layout="ce
 
 hide_github_icon ="""
     <style>
-    .viewerBadge_container__1QSob {
+    [class*="viewerBadge_container"] {
         display: none !important;
     }
 
-    # [data-testid="stToolbar"] {
-    #     display: none !important;
-    # }
-
-    header {
-        visibility: hidden !important;
+    .stDeployeButton {
+        display: none !important;
     }
     </style>
 """
 
-# st.markdown(hide_github_icon, unsafe_allow_html=True)
+st.markdown(hide_github_icon, unsafe_allow_html=True)
 
 # -------------------------
 # 2. Custom CSS
