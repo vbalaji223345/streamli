@@ -15,21 +15,26 @@ def generate_short_month_id(prefix):
 # -------------------------
 st.set_page_config(page_title="BBW Violet Chatbot", page_icon="🛀", layout="centered")
 
-
-hide_github_icon ="""
+move_sidebar_css = """
     <style>
-    [class*="viewerBadge_container"] {
-        display: none !important;
-    }
 
-    .stDeployeButton {
-        display: none !important;
-    }
+        [data-testid="stHamburger"] {
+            display: none !important;
+        }
+
+        header {
+            background: transparent !important;
+        }
+
+        [data-testid="collapsedControl"] {
+            position: fixed !important;
+            top: 80px !important;
+            left:15px !important;
+            z-index: 99999 !important;
+        }
     </style>
 """
-
-st.markdown(hide_github_icon, unsafe_allow_html=True)
-
+st.markdown(move_sidebar_css, unsafe_allow_html=True)
 # -------------------------
 # 2. Custom CSS
 # -------------------------
