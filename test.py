@@ -13,28 +13,25 @@ def generate_short_month_id(prefix):
 # -------------------------
 # 1. Page Configuration
 # -------------------------
-st.set_page_config(page_title="BBW Violet Chatbot", page_icon="🛀", layout="centered")
+st.set_page_config(page_title="BBW Violet Chatbot", page_icon="🛀", layout="centered", initial_sidebar_state="expanded")
 
-move_sidebar_css = """
+lock_sidebar_css = """
     <style>
 
-        [data-testid="stHamburger"] {
+        [data-testid="stToolbar"] {
             display: none !important;
         }
 
-        header {
-            background: transparent !important;
+        [data-testid="stSidebarCollapseButton"] {
+            display: none !important;
         }
 
         [data-testid="collapsedControl"] {
-            position: fixed !important;
-            top: 80px !important;
-            left:15px !important;
-            z-index: 99999 !important;
+            display: none !important;
         }
     </style>
 """
-st.markdown(move_sidebar_css, unsafe_allow_html=True)
+st.markdown(lock_sidebar_css, unsafe_allow_html=True)
 # -------------------------
 # 2. Custom CSS
 # -------------------------
