@@ -45,7 +45,14 @@ st.markdown(hide_st_style,unsafe_allow_html=True)
 html(
     """
     <script>
-    window.top.document.querySelectorAll('[href*="streamlit.io"]').forEach(e => e.setAttribute("style", "display: none;"));
+    const parentWindow = window.parent.document;
+    const style = parentWindow.createElement('style');
+
+    style.innerHTML = '
+        .viewerBadge_container { display: none !important; }
+        .viewerBadge_link { display: none !important; }
+    ';
+    parentWindow.head.appendChild(style);
     </script>
     """,
     height=0,
