@@ -141,7 +141,7 @@ def call_model(prompt: str, user_id: str, session_id: str) -> str:
     response = requests.post(
       "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953",# new Prod End Point
       data=data,
-      timeout=15
+      timeout=120
     )
     return response.json().get('text', "No response text found.")
   except Exception as e:
