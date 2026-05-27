@@ -17,9 +17,20 @@ def generate_short_month_id(prefix):
 st.set_page_config(page_title="BBW Violet Chatbot", page_icon="🛀", layout="centered", initial_sidebar_state="expanded")
 #to hide fork and git hub icons with full hamburger menu
 lock_sidebar_css = """
-    <script>
-    window.top.document.querySelectorAll('[href*="streamlit.io"]').forEach(e => e.setAttribute("style", "display: none;"));
-    </script>
+    <style>
+
+        [data-testid="stToolbar"] {
+            display: none !important;
+        }
+
+        [data-testid="stSidebarCollapseButton"] {
+            display: none !important;
+        }
+
+        [data-testid="collapsedControl"] {
+            display: none !important;
+        }
+    </style>
 """
 st.markdown(lock_sidebar_css, unsafe_allow_html=True)
 
@@ -34,14 +45,7 @@ st.markdown(hide_st_style,unsafe_allow_html=True)
 html(
     """
     <script>
-    const parentWindow = window.parent.document;
-    const style = parentWindow.createElement('style');
-
-    style.innerHTML = '
-        .viewerBadge_container { display: none !important; }
-        .viewerBadge_link { display: none !important; }
-    ';
-    parentWindow.head.appendChild(style);
+    window.top.document.querySelectorAll('[href*="streamlit.io"]').forEach(e => e.setAttribute("style", "display: none;"));
     </script>
     """,
     height=0,
