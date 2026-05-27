@@ -265,7 +265,7 @@ with st.sidebar:
 # -------------------------
 # 6. MAIN WINDOW: UI
 # -------------------------
-st.title("🛀\🧼 BBW Violet local Chatbot⁽ᵖʳᵒᵈ⁾")
+st.title("🧼BBW Violet local Chatbot⁽ᵖʳᵒᵈ⁾")
 
 chat_container = st.container(height=400)
 
