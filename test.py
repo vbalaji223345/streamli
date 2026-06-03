@@ -141,25 +141,25 @@ st.markdown("""
 # -------------------------
 # 3. Model Logic (UPDATED)
 # -------------------------
+_http_session = requests.Session()
+
 def call_model(prompt: str, user_id: str, session_id: str) -> tuple[str, float]:
   st.session_state.api_call_count += 1
-  start = time.perf_counter()
   try:
     data = {
       "userId": user_id,
       "sessionId": session_id,
       "text": prompt
     }
-    response = requests.post(
-      "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953",# new prod End Point
-      data=data,
+    response = _http_session.post(
+      "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953",
+      json=data,
       timeout=120
     )
-    latency_ms = (time.perf_counter() - start) * 1000
+    latency_ms = response.elapsed.total_seconds() * 1000
     return response.json().get('text', "No response text found."), latency_ms
   except Exception as e:
-    latency_ms = (time.perf_counter() - start) * 1000
-    return f"Error connecting to model: {e}", latency_ms
+    return f"Error connecting to model: {e}", 0.0
 
 def latency_badge(ms: float, turn: int | None = None) -> str:
   if ms <= 3000:
@@ -196,6 +196,12 @@ if "api_call_count" not in st.session_state:
   st.session_state.api_call_count = 0
 if "verdicts" not in st.session_state:
   st.session_state.verdicts = {}
+if "batch_pending" not in st.session_state:
+  st.session_state.batch_pending = False
+if "is_responding" not in st.session_state:
+  st.session_state.is_responding = False
+if "pending_manual_prompt" not in st.session_state:
+  st.session_state.pending_manual_prompt = None
 
 # -------------------------
 # 5. SIDEBAR: Controls & Credentials (UPDATED)
@@ -328,47 +334,75 @@ with st.sidebar:
 # -------------------------
 st.title("🧼BBW Violet local Chatbot⁽ᵖʳᵒᵈ⁾")
 
-chat_container = st.container(height=400)
-
 _verdict_options = [
   "RAI Safe", "RAI High Risk", "RAI Low Risk",
   "Unknown", "Customer Treatment Error", "Functional Error",
 ]
 
-with chat_container:
-  if not st.session_state.chat_history:
-    st.info("Chat history is empty.")
-  else:
-    for turn, item in enumerate(st.session_state.chat_history, start=1):
-      idx = turn - 1
-      avatar = "📄" if item.get("type") == "batch" else "🧑‍💻"
-      with st.chat_message("user", avatar=avatar):
-        st.write(item['prompt'])
-      with st.chat_message("assistant", avatar="🤖"):
-        if item['response'].strip():
-          st.write(item['response'])
-        else:
-          st.warning("⚠️ No response received")
-        if item.get("latency_ms") is not None:
-          st.markdown(latency_badge(item["latency_ms"], turn), unsafe_allow_html=True)
+def render_history():
+  with chat_container:
+    if not st.session_state.chat_history:
+      st.info("Chat history is empty.")
+    else:
+      for turn, item in enumerate(st.session_state.chat_history, start=1):
+        idx = turn - 1
+        avatar = "📄" if item.get("type") == "batch" else "🧑‍💻"
+        with st.chat_message("user", avatar=avatar):
+          st.write(item['prompt'])
+        with st.chat_message("assistant", avatar="🤖"):
+          if item['response'].strip():
+            st.write(item['response'])
+          else:
+            st.warning("⚠️ No response received")
+          if item.get("latency_ms") is not None:
+            st.markdown(latency_badge(item["latency_ms"], turn), unsafe_allow_html=True)
 
-        if item['response'].strip():
-          current = st.session_state.verdicts.get(idx, "")
-          cols = st.columns(len(_verdict_options))
-          for col, opt in zip(cols, _verdict_options):
-            if col.button(opt, key=f"v_{turn}_{opt}", type="primary" if current == opt else "secondary", use_container_width=True):
-              st.session_state.verdicts[idx] = "" if current == opt else opt
-              st.rerun()
+          if item['response'].strip():
+            current = st.session_state.verdicts.get(idx, "")
+            locked = st.session_state.is_processing or st.session_state.is_responding
+            lock_tip = (
+              "⚠️ Batch is still running — select verdicts once it completes." if st.session_state.is_processing
+              else "⚠️ Waiting for response — select verdict once it arrives." if st.session_state.is_responding
+              else None
+            )
+            cols = st.columns(len(_verdict_options))
+            for col, opt in zip(cols, _verdict_options):
+              clicked = col.button(
+                opt,
+                key=f"v_{turn}_{opt}",
+                type="primary" if current == opt else "secondary",
+                use_container_width=True,
+                disabled=locked,
+                help=lock_tip,
+              )
+              if clicked:
+                if current == opt:
+                  st.session_state.verdicts[idx] = ""
+                  st.toast(f"Verdict cleared for Turn {turn}", icon="🗑️")
+                else:
+                  st.session_state.verdicts[idx] = opt
+                  st.toast(f"Turn {turn} → {opt}", icon="✅")
+                st.rerun()
+
+chat_container = st.container(height=400)
+render_history()
 
 # -------------------------
 # 7. Manual Input Logic (UPDATED)
 # -------------------------
-if prompt := st.chat_input("Message Violet..."):
+if prompt := st.chat_input("Message Violet...", disabled=st.session_state.is_processing or st.session_state.is_responding):
+  st.session_state.pending_manual_prompt = prompt
+  st.session_state.is_responding = True
+  st.rerun()
+
+if st.session_state.is_responding and st.session_state.pending_manual_prompt:
+  prompt = st.session_state.pending_manual_prompt
+  st.session_state.pending_manual_prompt = None
   with st.spinner("Violet is thinking..."):
     response, latency_ms = call_model(prompt, u_id, s_id)
-
   st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response, "latency_ms": latency_ms})
   st.session_state.results.append({"User id": u_id, "Session id": s_id, "source": "manual", "prompt": prompt, "response": response if response.strip() else "[BLANK]", "latency (s)": round(latency_ms / 1000, 2)})
+  st.session_state.is_responding = False
   st.rerun()
 
 # -------------------------
@@ -376,8 +410,12 @@ if prompt := st.chat_input("Message Violet..."):
 # -------------------------
 if start_clicked and uploaded_file is not None:
   st.session_state.is_processing = True
+  st.session_state.batch_pending = True
   st.session_state.processing_done = False
-  # st.session_state.results = []
+  st.rerun()
+
+if st.session_state.batch_pending and uploaded_file is not None:
+  st.session_state.batch_pending = False
 
   batch_prefix = prefix_input.strip() if prefix_input.strip() else "U"
 
@@ -417,9 +455,14 @@ if start_clicked and uploaded_file is not None:
               current = st.session_state.verdicts.get(verdict_idx, "")
               cols = st.columns(len(_verdict_options))
               for col, opt in zip(cols, _verdict_options):
-                if col.button(opt, key=f"v_{turn}_{opt}", type="primary" if current == opt else "secondary", use_container_width=True):
-                  st.session_state.verdicts[verdict_idx] = "" if current == opt else opt
-                  st.rerun()
+                col.button(
+                opt,
+                key=f"v_{turn}_{opt}",
+                type="primary" if current == opt else "secondary",
+                use_container_width=True,
+                disabled=True,
+                help="⚠️ Batch is still running — select verdicts once it completes.",
+              )
 
         time.sleep(0.2)
 
