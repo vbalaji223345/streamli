@@ -153,7 +153,7 @@ def call_model(prompt: str, user_id: str, session_id: str) -> tuple[str, float]:
     response = requests.post(
       "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953",# new prod End Point
       data=data,
-      timeout=15
+      timeout=120
     )
     latency_ms = (time.perf_counter() - start) * 1000
     return response.json().get('text', "No response text found."), latency_ms
@@ -330,30 +330,35 @@ st.title("🧼BBW Violet local Chatbot⁽ᵖʳᵒᵈ⁾")
 
 chat_container = st.container(height=400)
 
+_verdict_options = [
+  "RAI Safe", "RAI High Risk", "RAI Low Risk",
+  "Unknown", "Customer Treatment Error", "Functional Error",
+]
+
 with chat_container:
   if not st.session_state.chat_history:
     st.info("Chat history is empty.")
   else:
-    _verdict_options = [
-      "RAI Safe", "RAI High Risk", "RAI Low Risk",
-      "Unknown", "Customer Treatment Error", "Functional Error",
-    ]
     for turn, item in enumerate(st.session_state.chat_history, start=1):
       idx = turn - 1
       avatar = "📄" if item.get("type") == "batch" else "🧑‍💻"
       with st.chat_message("user", avatar=avatar):
         st.write(item['prompt'])
       with st.chat_message("assistant", avatar="🤖"):
-        st.write(item['response'])
+        if item['response'].strip():
+          st.write(item['response'])
+        else:
+          st.warning("⚠️ No response received")
         if item.get("latency_ms") is not None:
           st.markdown(latency_badge(item["latency_ms"], turn), unsafe_allow_html=True)
 
-        current = st.session_state.verdicts.get(idx, "")
-        cols = st.columns(len(_verdict_options))
-        for col, opt in zip(cols, _verdict_options):
-          if col.button(opt, key=f"v_{turn}_{opt}", type="primary" if current == opt else "secondary", use_container_width=True):
-            st.session_state.verdicts[idx] = "" if current == opt else opt
-            st.rerun()
+        if item['response'].strip():
+          current = st.session_state.verdicts.get(idx, "")
+          cols = st.columns(len(_verdict_options))
+          for col, opt in zip(cols, _verdict_options):
+            if col.button(opt, key=f"v_{turn}_{opt}", type="primary" if current == opt else "secondary", use_container_width=True):
+              st.session_state.verdicts[idx] = "" if current == opt else opt
+              st.rerun()
 
 # -------------------------
 # 7. Manual Input Logic (UPDATED)
@@ -363,7 +368,7 @@ if prompt := st.chat_input("Message Violet..."):
     response, latency_ms = call_model(prompt, u_id, s_id)
 
   st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response, "latency_ms": latency_ms})
-  st.session_state.results.append({"User id": u_id, "Session id": s_id, "source": "manual", "prompt": prompt, "response": response, "latency (s)": round(latency_ms / 1000, 2)})
+  st.session_state.results.append({"User id": u_id, "Session id": s_id, "source": "manual", "prompt": prompt, "response": response if response.strip() else "[BLANK]", "latency (s)": round(latency_ms / 1000, 2)})
   st.rerun()
 
 # -------------------------
@@ -394,7 +399,28 @@ if start_clicked and uploaded_file is not None:
         user_id_display.caption(row_user_id)
         session_id_display.caption(row_session_id)
 
-        resp, latency_ms = call_model(p, row_user_id, row_session_id)
+        turn = len(st.session_state.chat_history) + 1
+
+        verdict_idx = turn - 1
+        with chat_container:
+          with st.chat_message("user", avatar="📄"):
+            st.write(p)
+          with st.chat_message("assistant", avatar="🤖"):
+            with st.spinner("Violet is thinking..."):
+              resp, latency_ms = call_model(p, row_user_id, row_session_id)
+            if resp.strip():
+              st.write(resp)
+            else:
+              st.warning("⚠️ No response received")
+            st.markdown(latency_badge(latency_ms, turn), unsafe_allow_html=True)
+            if resp.strip():
+              current = st.session_state.verdicts.get(verdict_idx, "")
+              cols = st.columns(len(_verdict_options))
+              for col, opt in zip(cols, _verdict_options):
+                if col.button(opt, key=f"v_{turn}_{opt}", type="primary" if current == opt else "secondary", use_container_width=True):
+                  st.session_state.verdicts[verdict_idx] = "" if current == opt else opt
+                  st.rerun()
+
         time.sleep(0.2)
 
         st.session_state.results.append({
@@ -402,7 +428,7 @@ if start_clicked and uploaded_file is not None:
           "Session id": row_session_id,
           "source": "csv",
           "prompt": p,
-          "response": resp,
+          "response": resp if resp.strip() else "[BLANK]",
           "latency (s)": round(latency_ms / 1000, 2),
         })
         st.session_state.chat_history.append({
