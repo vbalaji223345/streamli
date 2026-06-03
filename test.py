@@ -15,6 +15,7 @@ def generate_short_month_id(prefix):
 # 1. Page Configuration
 # -------------------------
 st.set_page_config(page_title="BBW Violet Chatbot", page_icon="🛀", layout="centered", initial_sidebar_state="expanded")
+
 #to hide fork and git hub icons with full hamburger menu
 lock_sidebar_css = """
     <style>
@@ -124,14 +125,25 @@ st.markdown("""
       visibility: visible;
       opacity: 1;
     }
+    [data-testid="stChatMessage"] button {
+      font-size: 8px !important;
+      padding: 1px 3px !important;
+      min-height: 0px !important;
+      height: 22px !important;
+      line-height: 1 !important;
+      white-space: nowrap !important;
+      overflow: hidden !important;
+      text-overflow: ellipsis !important;
+    }
   </style>
 """, unsafe_allow_html=True)
 
 # -------------------------
 # 3. Model Logic (UPDATED)
 # -------------------------
-def call_model(prompt: str, user_id: str, session_id: str) -> str:
+def call_model(prompt: str, user_id: str, session_id: str) -> tuple[str, float]:
   st.session_state.api_call_count += 1
+  start = time.perf_counter()
   try:
     data = {
       "userId": user_id,
@@ -139,13 +151,31 @@ def call_model(prompt: str, user_id: str, session_id: str) -> str:
       "text": prompt
     }
     response = requests.post(
-      "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953",# new Prod End Point
+      "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953",# new prod End Point
       data=data,
-      timeout=120
+      timeout=15
     )
-    return response.json().get('text', "No response text found.")
+    latency_ms = (time.perf_counter() - start) * 1000
+    return response.json().get('text', "No response text found."), latency_ms
   except Exception as e:
-    return f"Error connecting to model: {e}"
+    latency_ms = (time.perf_counter() - start) * 1000
+    return f"Error connecting to model: {e}", latency_ms
+
+def latency_badge(ms: float, turn: int | None = None) -> str:
+  if ms <= 3000:
+    color, bg = "#1a7f37", "#dafbe1"
+  elif ms <= 5000:
+    color, bg = "#9a6700", "#fff8c5"
+  else:
+    color, bg = "#cf222e", "#ffebe9"
+  label = f"{ms:.0f} ms" if ms < 1000 else f"{ms/1000:.2f} s"
+  turn_tag = f'<span style="color:#888;font-weight:400;">Turn {turn}&nbsp;&nbsp;</span>' if turn is not None else ""
+  return (
+    f'<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:12px;'
+    f'font-size:11px;font-weight:600;color:{color};background:{bg};'
+    f'border:1px solid {color}33;font-family:monospace;margin-top:4px;">'
+    f'{turn_tag}⏱ {label}</span>'
+  )
 
 # -------------------------
 # 4. Session State Initialization
@@ -164,6 +194,8 @@ if "generated_session_id" not in st.session_state:
   st.session_state.generated_session_id = ""
 if "api_call_count" not in st.session_state:
   st.session_state.api_call_count = 0
+if "verdicts" not in st.session_state:
+  st.session_state.verdicts = {}
 
 # -------------------------
 # 5. SIDEBAR: Controls & Credentials (UPDATED)
@@ -171,6 +203,15 @@ if "api_call_count" not in st.session_state:
 with st.sidebar:
   st.title("🛀 Violet Controls")
   st.metric(label="🔢 API Calls This Session", value=st.session_state.api_call_count)
+
+  _latencies = [item["latency_ms"] for item in st.session_state.chat_history if "latency_ms" in item]
+  if _latencies:
+    _avg = sum(_latencies) / len(_latencies)
+    _min, _max = min(_latencies), max(_latencies)
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Avg", f"{_avg/1000:.2f}s")
+    col2.metric("Min", f"{_min/1000:.2f}s")
+    col3.metric("Max", f"{_max/1000:.2f}s")
 
   st.subheader("BBW User details")
   prefix_input = st.text_input("Enter Prefix", placeholder="e.g. B")
@@ -240,6 +281,7 @@ with st.sidebar:
       st.warning("Please enter a prefix first.")
     st.session_state.chat_history = []
     st.session_state.results = []
+    st.session_state.verdicts = {}
     st.session_state.processing_done = False
     st.session_state.is_processing = False
     st.rerun()
@@ -247,6 +289,7 @@ with st.sidebar:
   if st.button("🗑️ Clear All History", use_container_width=True):
     st.session_state.chat_history = []
     st.session_state.results = []
+    st.session_state.verdicts = {}
     st.session_state.processing_done = False
     st.session_state.is_processing = False
     st.rerun()
@@ -271,6 +314,7 @@ with st.sidebar:
   
   if st.session_state.processing_done or len(st.session_state.results) > 0:
     res_df = pd.DataFrame(st.session_state.results)
+    res_df["verdict"] = [st.session_state.verdicts.get(i, "") for i in range(len(st.session_state.results))]
     st.download_button(
       label="⬇️ Download Results (CSV)",
       data=res_df.to_csv(index=False),
@@ -290,32 +334,36 @@ with chat_container:
   if not st.session_state.chat_history:
     st.info("Chat history is empty.")
   else:
-    for item in st.session_state.chat_history:
-      if item.get("type") == "batch":
-        with st.chat_message("user", avatar="📄"):
-          st.write(item['prompt1'])
-        with st.chat_message("assistant", avatar="🤖"):
-          st.write(item['response1'])
-        with st.chat_message("user", avatar="📄"):
-          st.write(item['prompt2'])
-        with st.chat_message("assistant", avatar="🤖"):
-          st.write(item['response2'])
-      else:
-        with st.chat_message("user", avatar="🧑‍💻"):
-          st.write(item['prompt'])
-        with st.chat_message("assistant", avatar="🤖"):
-          st.write(item['response'])
+    _verdict_options = [
+      "RAI Safe", "RAI High Risk", "RAI Low Risk",
+      "Unknown", "Customer Treatment Error", "Functional Error",
+    ]
+    for turn, item in enumerate(st.session_state.chat_history, start=1):
+      idx = turn - 1
+      avatar = "📄" if item.get("type") == "batch" else "🧑‍💻"
+      with st.chat_message("user", avatar=avatar):
+        st.write(item['prompt'])
+      with st.chat_message("assistant", avatar="🤖"):
+        st.write(item['response'])
+        if item.get("latency_ms") is not None:
+          st.markdown(latency_badge(item["latency_ms"], turn), unsafe_allow_html=True)
+
+        current = st.session_state.verdicts.get(idx, "")
+        cols = st.columns(len(_verdict_options))
+        for col, opt in zip(cols, _verdict_options):
+          if col.button(opt, key=f"v_{turn}_{opt}", type="primary" if current == opt else "secondary", use_container_width=True):
+            st.session_state.verdicts[idx] = "" if current == opt else opt
+            st.rerun()
 
 # -------------------------
 # 7. Manual Input Logic (UPDATED)
 # -------------------------
 if prompt := st.chat_input("Message Violet..."):
   with st.spinner("Violet is thinking..."):
-    # Passing the IDs from the sidebar text inputs
-    response = call_model(prompt, u_id, s_id)
-  
-  st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response})
-  st.session_state.results.append({"User id": u_id, "Session id": s_id, "source": "manual", "prompt1": prompt, "response1": response})
+    response, latency_ms = call_model(prompt, u_id, s_id)
+
+  st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response, "latency_ms": latency_ms})
+  st.session_state.results.append({"User id": u_id, "Session id": s_id, "source": "manual", "prompt": prompt, "response": response, "latency (s)": round(latency_ms / 1000, 2)})
   st.rerun()
 
 # -------------------------
@@ -328,6 +376,9 @@ if start_clicked and uploaded_file is not None:
 
   batch_prefix = prefix_input.strip() if prefix_input.strip() else "U"
 
+  row_user_id = generate_short_month_id(f"{batch_prefix}_U")
+  row_session_id = generate_short_month_id(f"{batch_prefix}_S")
+
   try:
     df = pd.read_csv(uploaded_file)
     if prompt_col not in df.columns:
@@ -339,42 +390,33 @@ if start_clicked and uploaded_file is not None:
       status_area.info(f"Processing {total} prompts...")
 
       for idx, p in enumerate(prompts, start=1):
-        # Auto-generate unique IDs per row using same format as manual
-        row_user_id = generate_short_month_id(f"{batch_prefix}_U")
-        row_session_id = generate_short_month_id(f"{batch_prefix}_S")
+
         user_id_display.caption(row_user_id)
         session_id_display.caption(row_session_id)
 
-        # Turn 1: greeting
-        resp1 = call_model("Hi", row_user_id, row_session_id)
-        time.sleep(0.3)
-
-        # Turn 2: actual prompt
-        resp2 = call_model(p, row_user_id, row_session_id)
+        resp, latency_ms = call_model(p, row_user_id, row_session_id)
         time.sleep(0.2)
 
         st.session_state.results.append({
           "User id": row_user_id,
           "Session id": row_session_id,
-          "source":"csv",
-          "prompt1": "Hi",
-          "response1": resp1,
-          "prompt2": p,
-          "response2": resp2,
+          "source": "csv",
+          "prompt": p,
+          "response": resp,
+          "latency (s)": round(latency_ms / 1000, 2),
         })
         st.session_state.chat_history.append({
           "type": "batch",
           "user_id": row_user_id,
           "session_id": row_session_id,
-          "source":"csv",
-          "prompt1": "Hi",
-          "response1": resp1,
-          "prompt2": p,
-          "response2": resp2,
+          "source": "csv",
+          "prompt": p,
+          "response": resp,
+          "latency_ms": latency_ms,
         })
 
         progress_bar.progress(int((idx / total) * 100))
-        status_area.info(f"Processing: {idx}/{total}")
+        status_area.info(f"Processing: {idx}/{total} | Last: {latency_ms/1000:.2f}s")
 
       st.session_state.processing_done = True
       st.session_state.is_processing = False
