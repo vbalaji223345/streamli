@@ -50,10 +50,10 @@ st.markdown(hide_st_style,unsafe_allow_html=True)
 html(
     """
     <script>
-    window.top.document.querySelectorAll('[href*="streamlit.io"]').forEach(e => e.setAttribute("style", "display: none;"));
+    window.parent.document.querySelectorAll('[href*="streamlit.io"]').forEach(e => e.setAttribute("style", "display: none;"));
 
     (function() {
-      var D = window.top.document;
+      var D = window.parent.document;
 
       function ensureTip() {
         var t = D.getElementById('__lat_tip__');
@@ -173,7 +173,7 @@ html(
           var left = r.left + r.width / 2 - tip.offsetWidth / 2;
           var top = r.top - tip.offsetHeight - 8;
           if (top < 0) top = r.bottom + 8;
-          tip.style.left = Math.max(4, Math.min(left, window.top.innerWidth - tip.offsetWidth - 4)) + 'px';
+          tip.style.left = Math.max(4, Math.min(left, window.parent.innerWidth - tip.offsetWidth - 4)) + 'px';
           tip.style.top  = top + 'px';
         } catch(e) {}
       }
@@ -194,10 +194,10 @@ html(
       bindBadges();
 
       // Reconnect observer each time this script runs (iframe may be recreated on rerun)
-      if (window.top.__latObs) { try { window.top.__latObs.disconnect(); } catch(e) {} }
+      if (window.parent.__latObs) { try { window.parent.__latObs.disconnect(); } catch(e) {} }
       var obs = new MutationObserver(function() { bindBadges(); });
       obs.observe(D.body, { childList: true, subtree: true });
-      window.top.__latObs = obs;
+      window.parent.__latObs = obs;
     })();
     </script>
     """,
@@ -416,7 +416,7 @@ def latency_badge(ms: float, turn: int | None = None, timing_details: dict | Non
     return badge
   tip_json = _json_mod.dumps(timing_details)
   return (
-    '<span class="lat-badge-wrap" style="display:inline-block;cursor:default">'
+    '<span class="lat-badge-wrap" style="display:inline-block;cursor:pointer">'
     + badge
     + f'<span class="lat-data" style="display:none">{tip_json}</span>'
     + '</span>'
