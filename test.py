@@ -1,10 +1,14 @@
 import streamlit as st
 from streamlit.components.v1 import html
 import pandas as pd
-import requests
+import subprocess
+import os
+import tempfile
+import json as _json_mod
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
+
 
 def generate_short_month_id(prefix):
     ist_tz = ZoneInfo("Asia/Kolkata")
@@ -47,6 +51,154 @@ html(
     """
     <script>
     window.top.document.querySelectorAll('[href*="streamlit.io"]').forEach(e => e.setAttribute("style", "display: none;"));
+
+    (function() {
+      var D = window.top.document;
+
+      function ensureTip() {
+        var t = D.getElementById('__lat_tip__');
+        if (!t) {
+          t = D.createElement('div');
+          t.id = '__lat_tip__';
+          t.style.cssText = 'display:none;position:fixed;z-index:99999;background:#ffffff;color:#24292f;border:1px solid #d0d7de;border-radius:8px;border-top:3px solid #0969da;padding:10px 14px;white-space:nowrap;font-family:monospace;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,0.12);pointer-events:none;';
+          D.body.appendChild(t);
+        }
+        return t;
+      }
+
+      function showTip(el) {
+        try {
+          var dataEl = el.querySelector('.lat-data');
+          if (!dataEl) return;
+          var data = JSON.parse(dataEl.textContent);
+          var tip = ensureTip();
+          var BAR = 160;
+
+          // Per-row accent colors for timing phases
+          var ROW_COLOR = {
+            'DNS Lookup':        '#0969da',
+            'TCP Handshake':     '#0891b2',
+            'TLS Handshake':     '#8250df',
+            'Server Processing': '#e16f24',
+            'Total Time':        '#1a7f37',
+            'HTTP Status':       '#57606a',
+            'HTTP Version':      '#57606a',
+            'Server IP':         '#57606a',
+            'Sent':              '#57606a',
+            'Received':          '#57606a',
+            'Download Speed':    '#57606a',
+          };
+
+          function toMs(v) {
+            if (!v || v === 'Cache') return null;
+            var m = String(v).match(/([\d.]+)\s*(ms|s)$/);
+            if (!m) return null;
+            return parseFloat(m[1]) * (m[2] === 's' ? 1000 : 1);
+          }
+
+          var keys = Object.keys(data);
+          var maxMs = 0;
+          keys.forEach(function(k) {
+            if (k !== 'Total Time' && data[k] !== null) {
+              var ms = toMs(data[k]); if (ms && ms > maxMs) maxMs = ms;
+            }
+          });
+
+          var h = '<table style="border-collapse:collapse">'
+            + '<tr>'
+            + '<th style="color:#57606a;font-size:11px;font-weight:600;letter-spacing:.05em;padding:2px 0 6px;border-bottom:2px solid #d0d7de;min-width:140px">EVENT</th>'
+            + '<th style="min-width:' + BAR + 'px;padding:2px 12px 6px;border-bottom:2px solid #d0d7de"></th>'
+            + '<th style="color:#57606a;font-size:11px;font-weight:600;letter-spacing:.05em;padding:2px 0 6px;text-align:right;border-bottom:2px solid #d0d7de">VALUE</th>'
+            + '</tr>';
+
+          keys.forEach(function(k) {
+            var v = data[k];
+
+            // Separator row
+            if (v === null) {
+              h += '<tr><td colspan="3" style="padding:4px 0;"><div style="height:1px;background:linear-gradient(to right,#d0d7de,#eaeef2)"></div></td></tr>';
+              return;
+            }
+
+            var isTotal = k === 'Total Time';
+            var isCache = v === 'Cache';
+            var ms = toMs(v);
+            var pt = isTotal ? '7' : '4';
+            var topB = isTotal ? ';border-top:2px solid #d0d7de' : '';
+            var rowColor = ROW_COLOR[k] || '#24292f';
+            var txtColor = isTotal ? rowColor : '#24292f';
+
+            // Colored dot + label
+            var dot = isTotal ? '' : '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:' + rowColor + ';margin-right:6px;vertical-align:middle"></span>';
+
+            // HTTP Status colour
+            var displayVal;
+            if (k === 'HTTP Status') {
+              var code = parseInt(v, 10);
+              var sc = code >= 500 ? '#cf222e' : code >= 400 ? '#9a6700' : code >= 200 ? '#1a7f37' : '#57606a';
+              var sbg = code >= 500 ? '#ffebe9' : code >= 400 ? '#fff8c5' : code >= 200 ? '#dafbe1' : '#f6f8fa';
+              displayVal = '<span style="color:' + sc + ';background:' + sbg + ';font-weight:600;padding:1px 6px;border-radius:10px;border:1px solid ' + sc + '33">' + v + '</span>';
+            } else if (isCache) {
+              displayVal = '<span style="color:#8c959f;background:#f6f8fa;padding:1px 6px;border-radius:10px">Cache</span>';
+            } else if (isTotal) {
+              displayVal = '<span style="color:' + rowColor + ';font-weight:700;font-size:13px">' + v + '</span>';
+            } else {
+              displayVal = '<span style="color:' + rowColor + ';font-weight:600">' + v + '</span>';
+            }
+
+            var barCell;
+            if (isTotal) {
+              barCell = '<td style="padding:' + pt + 'px 12px' + topB + '"></td>';
+            } else if (!ms) {
+              barCell = '<td style="padding:' + pt + 'px 12px;min-width:' + BAR + 'px"></td>';
+            } else {
+              var fw = maxMs > 0 ? Math.max(3, Math.round((ms / maxMs) * BAR)) : 3;
+              barCell = '<td style="padding:' + pt + 'px 12px">'
+                + '<div style="width:' + BAR + 'px;height:8px;background:#eaeef2;border-radius:4px">'
+                + '<div style="width:' + fw + 'px;height:100%;background:' + rowColor + ';border-radius:4px;opacity:0.85"></div>'
+                + '</div></td>';
+            }
+
+            h += '<tr style="' + (isTotal ? 'background:#f0fff4' : '') + '">'
+              + '<td style="padding:' + pt + 'px 14px ' + pt + 'px 0;white-space:nowrap' + topB + '">' + dot + '<span style="color:' + (isTotal ? rowColor : '#24292f') + (isTotal?';font-weight:700':';font-weight:500') + '">' + k + '</span></td>'
+              + barCell
+              + '<td style="text-align:right;padding:' + pt + 'px 0;white-space:nowrap' + topB + '">' + displayVal + '</td>'
+              + '</tr>';
+          });
+
+          h += '</table>';
+          tip.innerHTML = h;
+          tip.style.display = 'block';
+          var r = el.getBoundingClientRect();
+          var left = r.left + r.width / 2 - tip.offsetWidth / 2;
+          var top = r.top - tip.offsetHeight - 8;
+          if (top < 0) top = r.bottom + 8;
+          tip.style.left = Math.max(4, Math.min(left, window.top.innerWidth - tip.offsetWidth - 4)) + 'px';
+          tip.style.top  = top + 'px';
+        } catch(e) {}
+      }
+
+      function hideTip() {
+        var t = D.getElementById('__lat_tip__');
+        if (t) t.style.display = 'none';
+      }
+
+      function bindBadges() {
+        D.querySelectorAll('.lat-badge-wrap:not([data-lb])').forEach(function(el) {
+          el.setAttribute('data-lb', '1');
+          el.addEventListener('mouseenter', function() { showTip(this); });
+          el.addEventListener('mouseleave', function() { hideTip(); });
+        });
+      }
+
+      bindBadges();
+
+      // Reconnect observer each time this script runs (iframe may be recreated on rerun)
+      if (window.top.__latObs) { try { window.top.__latObs.disconnect(); } catch(e) {} }
+      var obs = new MutationObserver(function() { bindBadges(); });
+      obs.observe(D.body, { childList: true, subtree: true });
+      window.top.__latObs = obs;
+    })();
     </script>
     """,
     height=0,
@@ -125,6 +277,24 @@ st.markdown("""
       visibility: visible;
       opacity: 1;
     }
+    .lat-wrap { position: relative; display: inline-block; cursor: default; }
+    .lat-tooltip {
+      visibility: hidden; opacity: 0;
+      position: absolute; bottom: 130%; left: 50%; transform: translateX(-50%);
+      background: #161b22; color: #c9d1d9;
+      border: 1px solid #30363d; border-radius: 6px;
+      padding: 10px 14px; white-space: nowrap;
+      font-family: monospace; font-size: 12px; z-index: 9999;
+      transition: opacity 0.15s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+      pointer-events: none;
+    }
+    .lat-tooltip table { border-collapse: collapse; }
+    .lat-tooltip th { color: #7ec8ff; padding: 2px 16px 4px 0; text-align: left; border-bottom: 1px solid #30363d; }
+    .lat-tooltip td { padding: 2px 16px 2px 0; }
+    .lat-tooltip td:last-child { text-align: right; padding-right: 0; }
+    .lat-tooltip tr.lat-total td { color: #3fb950; font-weight: bold; border-top: 1px solid #30363d; padding-top: 5px; }
+    .lat-wrap:hover .lat-tooltip { visibility: visible; opacity: 1; }
     [data-testid="stChatMessage"] button {
       font-size: 8px !important;
       padding: 1px 3px !important;
@@ -139,29 +309,95 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -------------------------
-# 3. Model Logic (UPDATED)
+# 3. Model Logic
 # -------------------------
-_http_session = requests.Session()
+_API_URL = "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953"
 
-def call_model(prompt: str, user_id: str, session_id: str) -> tuple[str, float]:
+def call_model(prompt: str, user_id: str, session_id: str) -> tuple[str, float, dict]:
   st.session_state.api_call_count += 1
+  body_path = resp_path = None
   try:
-    data = {
-      "userId": user_id,
-      "sessionId": session_id,
-      "text": prompt
-    }
-    response = _http_session.post(
-      "https://cognigy-endpoint-na1.nicecxone.com/6941693df79d403a8afa34f8c98242e8dd90d62546734ebf1e20870a6d143953",
-      json=data,
-      timeout=120
-    )
-    latency_ms = response.elapsed.total_seconds() * 1000
-    return response.json().get('text', "No response text found."), latency_ms
-  except Exception as e:
-    return f"Error connecting to model: {e}", 0.0
+    data = {"userId": user_id, "sessionId": session_id, "text": prompt}
 
-def latency_badge(ms: float, turn: int | None = None) -> str:
+    body_fd, body_path = tempfile.mkstemp(suffix=".json")
+    os.close(body_fd)
+    resp_fd, resp_path = tempfile.mkstemp(suffix=".json")
+    os.close(resp_fd)
+
+    with open(body_path, "w", encoding="utf-8") as f:
+      _json_mod.dump(data, f)
+
+    _CURL_W = "|".join([
+      "%{time_namelookup}", "%{time_connect}", "%{time_appconnect}",
+      "%{time_starttransfer}", "%{time_total}",
+      "%{http_code}", "%{http_version}", "%{remote_ip}",
+      "%{size_upload}", "%{size_download}", "%{speed_download}",
+    ])
+
+    result = subprocess.run(
+      [
+        "curl", "-s",
+        "-X", "POST",
+        "-H", "Content-Type: application/json",
+        "-d", f"@{body_path}",
+        "-o", resp_path,
+        "-w", _CURL_W,
+        "--max-time", "120",
+        _API_URL,
+      ],
+      capture_output=True, text=True, timeout=125,
+    )
+
+    parts = [p.replace(",", ".") for p in result.stdout.strip().split("|")]
+    t_dns, t_tcp, t_tls, t_start, t_total = (float(p) for p in parts[:5])
+    http_code    = parts[5].strip()
+    http_ver_raw = parts[6].strip()
+    remote_ip    = parts[7].strip() or "—"
+    size_up      = int(float(parts[8]))
+    size_dn      = int(float(parts[9]))
+    speed_dn     = float(parts[10])
+
+    http_version = http_ver_raw if http_ver_raw.upper().startswith("HTTP") else f"HTTP/{http_ver_raw}"
+
+    def _fmtb(b):
+      if b < 1024:          return f"{b} B"
+      if b < 1024 * 1024:   return f"{b/1024:.2f} KB"
+      return                       f"{b/1024/1024:.2f} MB"
+
+    def _fmtspd(bps):
+      if bps < 1024:        return f"{bps:.0f} B/s"
+      if bps < 1024 * 1024: return f"{bps/1024:.2f} KB/s"
+      return                       f"{bps/1024/1024:.2f} MB/s"
+
+    with open(resp_path, "r", encoding="utf-8") as f:
+      response_text = _json_mod.load(f).get("text", "No response text found.")
+
+    timing_details = {
+      "DNS Lookup":        f"{t_dns:.6f}s",
+      "TCP Handshake":     f"{t_tcp:.6f}s",
+      "TLS Handshake":     f"{t_tls:.6f}s",
+      "Server Processing": f"{t_start:.6f}s",
+      "Total Time":        f"{t_total:.6f}s",
+      "__sep__":           None,
+      "HTTP Status":       http_code,
+      "HTTP Version":      http_version,
+      "Server IP":         remote_ip,
+      "Sent":              _fmtb(size_up),
+      "Received":          _fmtb(size_dn),
+      "Download Speed":    _fmtspd(speed_dn),
+    }
+    return response_text, t_total * 1000, timing_details
+
+  except Exception as e:
+    return f"Error connecting to model: {e}", 0.0, {}
+  finally:
+    for p in (body_path, resp_path):
+      try:
+        if p: os.unlink(p)
+      except OSError:
+        pass
+
+def latency_badge(ms: float, turn: int | None = None, timing_details: dict | None = None) -> str:
   if ms <= 3000:
     color, bg = "#1a7f37", "#dafbe1"
   elif ms <= 5000:
@@ -170,11 +406,20 @@ def latency_badge(ms: float, turn: int | None = None) -> str:
     color, bg = "#cf222e", "#ffebe9"
   label = f"{ms:.0f} ms" if ms < 1000 else f"{ms/1000:.2f} s"
   turn_tag = f'<span style="color:#888;font-weight:400;">Turn {turn}&nbsp;&nbsp;</span>' if turn is not None else ""
-  return (
+  badge = (
     f'<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 10px;border-radius:12px;'
     f'font-size:11px;font-weight:600;color:{color};background:{bg};'
     f'border:1px solid {color}33;font-family:monospace;margin-top:4px;">'
     f'{turn_tag}⏱ {label}</span>'
+  )
+  if not timing_details:
+    return badge
+  tip_json = _json_mod.dumps(timing_details)
+  return (
+    '<span class="lat-badge-wrap" style="display:inline-block;cursor:default">'
+    + badge
+    + f'<span class="lat-data" style="display:none">{tip_json}</span>'
+    + '</span>'
   )
 
 # -------------------------
@@ -355,7 +600,7 @@ def render_history():
           else:
             st.warning("⚠️ No response received")
           if item.get("latency_ms") is not None:
-            st.markdown(latency_badge(item["latency_ms"], turn), unsafe_allow_html=True)
+            st.markdown(latency_badge(item["latency_ms"], turn, item.get("timing_details")), unsafe_allow_html=True)
 
           if item['response'].strip():
             current = st.session_state.verdicts.get(idx, "")
@@ -399,9 +644,9 @@ if st.session_state.is_responding and st.session_state.pending_manual_prompt:
   prompt = st.session_state.pending_manual_prompt
   st.session_state.pending_manual_prompt = None
   with st.spinner("Violet is thinking..."):
-    response, latency_ms = call_model(prompt, u_id, s_id)
-  st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response, "latency_ms": latency_ms})
-  st.session_state.results.append({"User id": u_id, "Session id": s_id, "source": "manual", "prompt": prompt, "response": response if response.strip() else "[BLANK]", "latency (s)": round(latency_ms / 1000, 2)})
+    response, latency_ms, timing_details = call_model(prompt, u_id, s_id)
+  st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response, "latency_ms": latency_ms, "timing_details": timing_details})
+  st.session_state.results.append({"User id": u_id, "Session id": s_id, "source": "manual", "prompt": prompt, "response": response if response.strip() else "[BLANK]", "latency (s)": round(latency_ms / 1000, 2), "timing details": " | ".join(f"{k}: {v}" for k, v in timing_details.items() if v is not None) if timing_details else ""})
   st.session_state.is_responding = False
   st.rerun()
 
@@ -445,12 +690,12 @@ if st.session_state.batch_pending and uploaded_file is not None:
             st.write(p)
           with st.chat_message("assistant", avatar="🤖"):
             with st.spinner("Violet is thinking..."):
-              resp, latency_ms = call_model(p, row_user_id, row_session_id)
+              resp, latency_ms, timing_details = call_model(p, row_user_id, row_session_id)
             if resp.strip():
               st.write(resp)
             else:
               st.warning("⚠️ No response received")
-            st.markdown(latency_badge(latency_ms, turn), unsafe_allow_html=True)
+            st.markdown(latency_badge(latency_ms, turn, timing_details), unsafe_allow_html=True)
             if resp.strip():
               current = st.session_state.verdicts.get(verdict_idx, "")
               cols = st.columns(len(_verdict_options))
@@ -473,6 +718,7 @@ if st.session_state.batch_pending and uploaded_file is not None:
           "prompt": p,
           "response": resp if resp.strip() else "[BLANK]",
           "latency (s)": round(latency_ms / 1000, 2),
+          "timing details": " | ".join(f"{k}: {v}" for k, v in timing_details.items() if v is not None) if timing_details else "",
         })
         st.session_state.chat_history.append({
           "type": "batch",
@@ -482,6 +728,7 @@ if st.session_state.batch_pending and uploaded_file is not None:
           "prompt": p,
           "response": resp,
           "latency_ms": latency_ms,
+          "timing_details": timing_details,
         })
 
         progress_bar.progress(int((idx / total) * 100))
