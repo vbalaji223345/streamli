@@ -880,7 +880,7 @@ with st.sidebar:
   st.title("🛀 Violet Controls")
   st.metric(label="🔢 API Calls This Session", value=st.session_state.api_call_count)
 
-  _dm_checked = st.checkbox("🌙 Dark Mode", value=st.session_state.dark_mode, key="dm_toggle_cb")
+  _dm_checked = st.toggle("🌙 Dark Mode", value=st.session_state.dark_mode, key="dm_toggle_cb")
   if _dm_checked != st.session_state.dark_mode:
     st.session_state.dark_mode = _dm_checked
     st.rerun()
