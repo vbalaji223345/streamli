@@ -309,7 +309,7 @@ html(
 
         toggle.addEventListener('click', function() {
           applyState(!cbInput.checked);
-          setTimeout(function() { cbLabel.click(); }, 320);
+          setTimeout(function() { cbInput.click(); }, 320);
         });
       }
       setupDMToggle();
