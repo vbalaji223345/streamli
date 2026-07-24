@@ -1013,53 +1013,75 @@ if st.session_state.get("dark_mode", False):
 html("""<script>
 (function(){
   var D = window.parent.document;
-  var IS_DARK = document.documentElement.getAttribute('data-dark') === 'true';
 
-  var FOCUS_LIGHT = {
-    border: '1.5px solid #7c3aed',
-    boxShadow: '0 0 0 3px rgba(124,58,237,0.22), 0 0 10px rgba(124,58,237,0.12)',
-    background: '#ffffff',
-  };
-  var FOCUS_DARK = {
-    border: '1.5px solid #a78bfa',
-    boxShadow: '0 0 0 3px rgba(167,139,250,0.22), 0 0 10px rgba(167,139,250,0.12)',
-    background: 'rgba(255,255,255,0.08)',
-  };
-
-  function applyFocus(wrap, on) {
-    var dark = D.querySelector('[data-testid="stSidebar"]') &&
-               window.getComputedStyle(D.querySelector('[data-testid="stSidebar"] > div:first-child')).backgroundColor.indexOf('20, 22') !== -1;
-    var F = dark ? FOCUS_DARK : FOCUS_LIGHT;
-    if (on) {
-      wrap.style.setProperty('border', F.border, 'important');
-      wrap.style.setProperty('box-shadow', F.boxShadow, 'important');
-      wrap.style.setProperty('background', F.background, 'important');
-      wrap.style.setProperty('transition', 'all 0.15s ease', 'important');
-    } else {
-      wrap.style.removeProperty('border');
-      wrap.style.removeProperty('box-shadow');
-      wrap.style.removeProperty('background');
-    }
+  function isDark() {
+    var sb = D.querySelector('[data-testid="stSidebar"] > div:first-child');
+    if (!sb) return false;
+    var bg = window.getComputedStyle(sb).backgroundColor;
+    /* dark sidebar bg is rgb(20,22,36) — check for low-value rgb */
+    var m = bg.match(/rgb\\((\\d+),\\s*(\\d+),\\s*(\\d+)\\)/);
+    return m && parseInt(m[1]) < 50 && parseInt(m[2]) < 50 && parseInt(m[3]) < 80;
   }
 
-  function bindSidebarInputFocus() {
+  function getColors() {
+    if (isDark()) {
+      return {
+        rest:        '1.5px solid rgba(167,139,250,0.60)',
+        restBg:      'rgba(255,255,255,0.06)',
+        focus:       '1.5px solid #a78bfa',
+        focusShadow: '0 0 0 3px rgba(167,139,250,0.25)',
+        focusBg:     'rgba(255,255,255,0.10)',
+      };
+    }
+    return {
+      rest:        '1.5px solid rgba(124,58,237,0.55)',
+      restBg:      'rgba(255,255,255,0.92)',
+      focus:       '1.5px solid #7c3aed',
+      focusShadow: '0 0 0 3px rgba(124,58,237,0.22)',
+      focusBg:     '#ffffff',
+    };
+  }
+
+  function applyRest(wrap) {
+    var C = getColors();
+    wrap.style.setProperty('border',        C.rest,   'important');
+    wrap.style.setProperty('border-radius', '9px',    'important');
+    wrap.style.setProperty('background',    C.restBg, 'important');
+    wrap.style.setProperty('transition',    'all 0.15s ease', 'important');
+    wrap.style.removeProperty('box-shadow');
+  }
+
+  function applyFocus(wrap) {
+    var C = getColors();
+    wrap.style.setProperty('border',        C.focus,       'important');
+    wrap.style.setProperty('border-radius', '9px',         'important');
+    wrap.style.setProperty('box-shadow',    C.focusShadow, 'important');
+    wrap.style.setProperty('background',    C.focusBg,     'important');
+    wrap.style.setProperty('transition',    'all 0.15s ease', 'important');
+  }
+
+  function styleSidebarInputs() {
     var sidebar = D.querySelector('[data-testid="stSidebar"]');
     if (!sidebar) return;
     sidebar.querySelectorAll('input[type="text"]:not([data-sfh])').forEach(function(inp) {
       inp.setAttribute('data-sfh', '1');
-      /* BaseUI layers: [data-baseweb="base-input"] holds the visible border */
+      /* Walk up to find the element that actually carries the visible border.
+         BaseUI renders: [data-baseweb="input"] > [data-baseweb="base-input"] > input
+         The border is on [data-baseweb="base-input"]; fall back up the chain. */
       var wrap = inp.closest('[data-baseweb="base-input"]')
               || inp.closest('[data-baseweb="input"]')
               || inp.parentElement;
       if (!wrap) return;
-      inp.addEventListener('focus', function() { applyFocus(wrap, true); });
-      inp.addEventListener('blur',  function() { applyFocus(wrap, false); });
+      applyRest(wrap);                                     /* default border */
+      inp.addEventListener('focus', function() { applyFocus(wrap); });
+      inp.addEventListener('blur',  function() { applyRest(wrap);  });
     });
   }
 
-  bindSidebarInputFocus();
-  var obs = new MutationObserver(bindSidebarInputFocus);
-  obs.observe(D.body, { childList: true, subtree: true });
+  styleSidebarInputs();
+  if (window.parent.__sfhObs) window.parent.__sfhObs.disconnect();
+  window.parent.__sfhObs = new MutationObserver(styleSidebarInputs);
+  window.parent.__sfhObs.observe(D.body, { childList: true, subtree: true });
 })();
 </script>""", height=0)
 
