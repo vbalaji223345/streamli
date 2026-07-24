@@ -1007,6 +1007,33 @@ if st.session_state.get("dark_mode", False):
       [data-testid="stSidebar"] [data-testid="stToggle"] label {
         color: #e2e8f0 !important;
       }
+
+      /* ── Sidebar button text — light colours for dark bg ── */
+      [data-testid="stSidebar"] .stButton.vg-violet > button,
+      [data-testid="stSidebar"] .stButton:not(.vg-amber):not(.vg-rose):not(.vg-emerald):not(.vg-teal) > button {
+        color: #c4b5fd !important;
+      }
+      [data-testid="stSidebar"] .stButton.vg-amber > button {
+        color: #fcd34d !important;
+      }
+      [data-testid="stSidebar"] .stButton.vg-rose > button {
+        color: #fda4af !important;
+      }
+      [data-testid="stSidebar"] .stButton.vg-emerald > button {
+        color: #6ee7b7 !important;
+      }
+      [data-testid="stSidebar"] .stButton.vg-teal > button,
+      [data-testid="stSidebar"] .stDownloadButton.vg-teal > button {
+        color: #67e8f9 !important;
+      }
+
+      /* keep text readable on hover too */
+      [data-testid="stSidebar"] .stButton.vg-violet > button:hover { color: #ddd6fe !important; }
+      [data-testid="stSidebar"] .stButton.vg-amber  > button:hover { color: #fde68a !important; }
+      [data-testid="stSidebar"] .stButton.vg-rose   > button:hover { color: #fecdd3 !important; }
+      [data-testid="stSidebar"] .stButton.vg-emerald> button:hover { color: #a7f3d0 !important; }
+      [data-testid="stSidebar"] .stButton.vg-teal   > button:hover,
+      [data-testid="stSidebar"] .stDownloadButton.vg-teal > button:hover { color: #a5f3fc !important; }
     </style>
   """, unsafe_allow_html=True)
 
@@ -1027,10 +1054,12 @@ html("""<script>
     if (isDark()) {
       return {
         rest:        '1.5px solid rgba(167,139,250,0.60)',
-        restBg:      'rgba(255,255,255,0.06)',
+        restBg:      'rgba(255,255,255,0.07)',
         focus:       '1.5px solid #a78bfa',
         focusShadow: '0 0 0 3px rgba(167,139,250,0.25)',
-        focusBg:     'rgba(255,255,255,0.10)',
+        focusBg:     'rgba(255,255,255,0.12)',
+        textColor:   '#e2e8f0',
+        placeholderColor: 'rgba(226,232,240,0.40)',
       };
     }
     return {
@@ -1039,25 +1068,45 @@ html("""<script>
       focus:       '1.5px solid #7c3aed',
       focusShadow: '0 0 0 3px rgba(124,58,237,0.22)',
       focusBg:     '#ffffff',
+      textColor:   '#1e293b',
+      placeholderColor: 'rgba(30,41,59,0.40)',
     };
   }
 
-  function applyRest(wrap) {
+  function applyInputText(inp) {
+    var C = getColors();
+    inp.style.setProperty('color',                   C.textColor, 'important');
+    inp.style.setProperty('-webkit-text-fill-color', C.textColor, 'important');
+    /* inject placeholder colour via a dynamic <style> tag keyed by isDark */
+    var styleId = isDark() ? '__vl-ph-dark' : '__vl-ph-light';
+    if (!D.getElementById(styleId)) {
+      var s = D.createElement('style');
+      s.id = styleId;
+      s.textContent = isDark()
+        ? '[data-testid="stSidebar"] input::placeholder { color: rgba(226,232,240,0.40) !important; opacity:1 !important; }'
+        : '[data-testid="stSidebar"] input::placeholder { color: rgba(30,41,59,0.40) !important;   opacity:1 !important; }';
+      D.head.appendChild(s);
+    }
+  }
+
+  function applyRest(wrap, inp) {
     var C = getColors();
     wrap.style.setProperty('border',        C.rest,   'important');
     wrap.style.setProperty('border-radius', '9px',    'important');
     wrap.style.setProperty('background',    C.restBg, 'important');
     wrap.style.setProperty('transition',    'all 0.15s ease', 'important');
     wrap.style.removeProperty('box-shadow');
+    if (inp) applyInputText(inp);
   }
 
-  function applyFocus(wrap) {
+  function applyFocus(wrap, inp) {
     var C = getColors();
     wrap.style.setProperty('border',        C.focus,       'important');
     wrap.style.setProperty('border-radius', '9px',         'important');
     wrap.style.setProperty('box-shadow',    C.focusShadow, 'important');
     wrap.style.setProperty('background',    C.focusBg,     'important');
     wrap.style.setProperty('transition',    'all 0.15s ease', 'important');
+    if (inp) applyInputText(inp);
   }
 
   function styleSidebarInputs() {
@@ -1065,16 +1114,13 @@ html("""<script>
     if (!sidebar) return;
     sidebar.querySelectorAll('input[type="text"]:not([data-sfh])').forEach(function(inp) {
       inp.setAttribute('data-sfh', '1');
-      /* Walk up to find the element that actually carries the visible border.
-         BaseUI renders: [data-baseweb="input"] > [data-baseweb="base-input"] > input
-         The border is on [data-baseweb="base-input"]; fall back up the chain. */
       var wrap = inp.closest('[data-baseweb="base-input"]')
               || inp.closest('[data-baseweb="input"]')
               || inp.parentElement;
       if (!wrap) return;
-      applyRest(wrap);                                     /* default border */
-      inp.addEventListener('focus', function() { applyFocus(wrap); });
-      inp.addEventListener('blur',  function() { applyRest(wrap);  });
+      applyRest(wrap, inp);
+      inp.addEventListener('focus', function() { applyFocus(wrap, inp); });
+      inp.addEventListener('blur',  function() { applyRest(wrap, inp);  });
     });
   }
 
@@ -1552,6 +1598,7 @@ with st.sidebar:
       mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       use_container_width=True
     )
+
 
 # -------------------------
 # 6. MAIN WINDOW: UI
