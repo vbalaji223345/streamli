@@ -916,15 +916,18 @@ st.markdown("""
   }
 
   /* Text inputs — match drawer clean inputs */
-  [data-testid="stSidebar"] [data-baseweb="input"] {
+  [data-testid="stSidebar"] [data-baseweb="input"],
+  [data-testid="stSidebar"] [data-baseweb="textarea"],
+  [data-testid="stSidebar"] [data-baseweb="select"] > div:first-child {
     border-radius: 9px !important;
-    border: 1.5px solid rgba(124,58,237,0.22) !important;
+    border: 1.5px solid rgba(124,58,237,0.55) !important;
     background: rgba(255,255,255,0.9) !important;
     transition: border-color 0.15s, box-shadow 0.15s !important;
   }
-  [data-testid="stSidebar"] [data-baseweb="input"]:focus-within {
+  [data-testid="stSidebar"] [data-baseweb="input"]:focus-within,
+  [data-testid="stSidebar"] [data-baseweb="textarea"]:focus-within {
     border-color: #7c3aed !important;
-    box-shadow: 0 0 0 3px rgba(124,58,237,0.12) !important;
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.15) !important;
   }
 
   /* File uploader — card style */
@@ -983,11 +986,14 @@ if st.session_state.get("dark_mode", False):
       [data-testid="stSidebar"] [data-testid="stMetricValue"] {
         color: #a78bfa !important;
       }
-      [data-testid="stSidebar"] [data-baseweb="input"] {
+      [data-testid="stSidebar"] [data-baseweb="input"],
+      [data-testid="stSidebar"] [data-baseweb="textarea"],
+      [data-testid="stSidebar"] [data-baseweb="select"] > div:first-child {
         background: rgba(255,255,255,0.06) !important;
-        border-color: rgba(167,139,250,0.28) !important;
+        border-color: rgba(167,139,250,0.55) !important;
       }
-      [data-testid="stSidebar"] [data-baseweb="input"]:focus-within {
+      [data-testid="stSidebar"] [data-baseweb="input"]:focus-within,
+      [data-testid="stSidebar"] [data-baseweb="textarea"]:focus-within {
         border-color: #a78bfa !important;
         box-shadow: 0 0 0 3px rgba(167,139,250,0.15) !important;
       }
