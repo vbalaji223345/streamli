@@ -2250,108 +2250,78 @@ def render_history():
     if not st.session_state.chat_history:
       st.markdown("""
 <style>
-/* ── Orbit keyframes ── */
-@keyframes vl-orbit {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+@keyframes vl-float {
+  0%,100% { transform: translateY(0px); }
+  50%      { transform: translateY(-8px); }
 }
-@keyframes vl-logo-glow {
-  0%,100% { box-shadow: 0 6px 24px rgba(109,40,217,0.40); }
-  50%     { box-shadow: 0 6px 38px rgba(109,40,217,0.80), 0 0 0 10px rgba(124,58,237,0.10); }
+@keyframes vl-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(124,58,237,0.35); }
+  70%  { box-shadow: 0 0 0 18px rgba(124,58,237,0); }
+  100% { box-shadow: 0 0 0 0 rgba(124,58,237,0); }
 }
-@keyframes vl-fadein {
+@keyframes vl-fade-up {
   from { opacity:0; transform:translateY(10px); }
-  to   { opacity:1; transform:none; }
+  to   { opacity:1; transform:translateY(0); }
 }
-@keyframes vl-track-spin {
-  from { transform: translate(-50%,-50%) rotate(0deg); }
-  to   { transform: translate(-50%,-50%) rotate(360deg); }
+@keyframes vl-dot {
+  0%,80%,100% { opacity:0.2; transform:scaleY(0.6); }
+  40%         { opacity:1;   transform:scaleY(1); }
 }
-
-/* ── Scene ── */
-.vl-scene {
+.vl-empty-wrap {
   display:flex; flex-direction:column; align-items:center; justify-content:center;
-  min-height:280px; gap:16px; user-select:none; padding:24px 0;
+  height:100%; min-height:280px; gap:14px; padding:24px 0;
+  user-select:none;
 }
-
-/* ── Orbit ring ── */
-.vl-ring {
-  position:relative; width:140px; height:140px;
-  display:flex; align-items:center; justify-content:center;
-}
-
-/* Faint dashed orbit track */
-.vl-track {
-  position:absolute; width:108px; height:108px; border-radius:50%;
-  border:1.5px dashed rgba(124,58,237,0.22);
-  top:50%; left:50%;
-  transform: translate(-50%,-50%);
-  animation: vl-track-spin 12s linear infinite;
-}
-
-/* Central logo */
-.vl-center-logo {
-  width:60px; height:60px; border-radius:18px; z-index:2;
+.vl-logo {
+  width:72px; height:72px; border-radius:22px;
   background:linear-gradient(135deg,#7c3aed,#6d28d9);
   display:flex; align-items:center; justify-content:center;
-  font-size:28px;
-  animation: vl-logo-glow 2.8s ease-in-out infinite;
+  font-size:34px; box-shadow:0 8px 28px rgba(109,40,217,0.40);
+  animation: vl-float 3s ease-in-out infinite, vl-pulse-ring 2.6s ease-out 0.5s infinite;
 }
-
-/* Arm = zero-size div rotated from center; dot hangs off the end */
-.vl-arm {
-  position:absolute; width:0; height:0; top:50%; left:50%;
-  animation: vl-orbit 3.4s linear infinite;
-}
-.vl-arm:nth-child(3) { animation-delay:-1.13s; }  /* 120° offset */
-.vl-arm:nth-child(4) { animation-delay:-2.27s; }  /* 240° offset */
-
-.vl-orb {
-  position:absolute;
-  width:12px; height:12px; border-radius:50%;
-  background:radial-gradient(circle at 35% 35%, #c084fc 0%, #7c3aed 100%);
-  box-shadow: 0 0 10px 4px rgba(168,85,247,0.60), 0 0 3px 1px rgba(168,85,247,0.90);
-  transform: translate(-50%,-50%) translateX(54px);
-}
-
-/* Slightly smaller trailing dots for depth */
-.vl-arm:nth-child(3) .vl-orb { width:9px; height:9px; opacity:0.75; transform:translate(-50%,-50%) translateX(54px); }
-.vl-arm:nth-child(4) .vl-orb { width:10px; height:10px; opacity:0.88; transform:translate(-50%,-50%) translateX(54px); }
-
-/* ── Text ── */
-.vl-ttl {
-  font-size:21px; font-weight:900; letter-spacing:.09em;
-  background:linear-gradient(135deg,#6d28d9,#a855f7);
+.vl-title {
+  font-size:22px; font-weight:900; letter-spacing:0.08em;
+  background:linear-gradient(135deg,#7c3aed,#a855f7);
   -webkit-background-clip:text; -webkit-text-fill-color:transparent;
-  animation: vl-fadein .5s ease .1s both;
+  animation: vl-fade-up 0.6s ease 0.15s both;
 }
-.vl-bar {
-  width:50px; height:2px; border-radius:2px;
-  background:linear-gradient(to right,transparent,#7c3aed,transparent);
-  animation: vl-fadein .5s ease .2s both;
+.vl-sub {
+  font-size:13px; font-weight:600; color:#94a3b8;
+  letter-spacing:0.04em; text-transform:uppercase;
+  animation: vl-fade-up 0.6s ease 0.3s both;
 }
-.vl-sub2 {
-  font-size:11.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
-  color:#94a3b8; animation: vl-fadein .5s ease .3s both;
+.vl-hint {
+  font-size:12.5px; color:#b0b8c8; font-style:italic;
+  animation: vl-fade-up 0.6s ease 0.45s both;
+  display:flex; align-items:center; gap:6px;
 }
-.vl-hint2 {
-  font-size:12px; color:#b8c0cc; font-style:italic;
-  animation: vl-fadein .5s ease .42s both;
+.vl-dots { display:flex; gap:4px; align-items:center; }
+.vl-dot {
+  width:5px; height:14px; border-radius:3px;
+  background:#7c3aed; display:inline-block;
+  animation: vl-dot 1.4s ease-in-out infinite;
+}
+.vl-dot:nth-child(2) { animation-delay:0.2s; }
+.vl-dot:nth-child(3) { animation-delay:0.4s; }
+.vl-divider {
+  width:60px; height:2px; border-radius:2px;
+  background:linear-gradient(to right,transparent,rgba(124,58,237,0.35),transparent);
+  animation: vl-fade-up 0.6s ease 0.25s both;
 }
 </style>
-
-<div class="vl-scene">
-  <div class="vl-ring">
-    <div class="vl-track"></div>
-    <div class="vl-center-logo">💜</div>
-    <div class="vl-arm"><div class="vl-orb"></div></div>
-    <div class="vl-arm"><div class="vl-orb"></div></div>
-    <div class="vl-arm"><div class="vl-orb"></div></div>
+<div class="vl-empty-wrap">
+  <div class="vl-logo">💜</div>
+  <div class="vl-title">VIOLET BOT</div>
+  <div class="vl-divider"></div>
+  <div class="vl-sub">Bath &amp; Body Works · Conversation Tester</div>
+  <div class="vl-hint">
+    <div class="vl-dots">
+      <span class="vl-dot"></span>
+      <span class="vl-dot"></span>
+      <span class="vl-dot"></span>
+    </div>
+    Generate IDs, pick your filters, then start typing
   </div>
-  <div class="vl-ttl">VIOLET BOT</div>
-  <div class="vl-bar"></div>
-  <div class="vl-sub2">Bath &amp; Body Works · Conversation Tester</div>
-  <div class="vl-hint2">Generate IDs, pick your filters, then start typing</div>
 </div>
 """, unsafe_allow_html=True)
     else:
