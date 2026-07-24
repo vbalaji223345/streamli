@@ -2248,7 +2248,112 @@ _verdict_options = [
 def render_history():
   with chat_container:
     if not st.session_state.chat_history:
-      st.info("Chat history is empty.")
+      st.markdown("""
+<style>
+/* ── Orbit keyframes ── */
+@keyframes vl-orbit {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+@keyframes vl-logo-glow {
+  0%,100% { box-shadow: 0 6px 24px rgba(109,40,217,0.40); }
+  50%     { box-shadow: 0 6px 38px rgba(109,40,217,0.80), 0 0 0 10px rgba(124,58,237,0.10); }
+}
+@keyframes vl-fadein {
+  from { opacity:0; transform:translateY(10px); }
+  to   { opacity:1; transform:none; }
+}
+@keyframes vl-track-spin {
+  from { transform: translate(-50%,-50%) rotate(0deg); }
+  to   { transform: translate(-50%,-50%) rotate(360deg); }
+}
+
+/* ── Scene ── */
+.vl-scene {
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  min-height:280px; gap:16px; user-select:none; padding:24px 0;
+}
+
+/* ── Orbit ring ── */
+.vl-ring {
+  position:relative; width:140px; height:140px;
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* Faint dashed orbit track */
+.vl-track {
+  position:absolute; width:108px; height:108px; border-radius:50%;
+  border:1.5px dashed rgba(124,58,237,0.22);
+  top:50%; left:50%;
+  transform: translate(-50%,-50%);
+  animation: vl-track-spin 12s linear infinite;
+}
+
+/* Central logo */
+.vl-center-logo {
+  width:60px; height:60px; border-radius:18px; z-index:2;
+  background:linear-gradient(135deg,#7c3aed,#6d28d9);
+  display:flex; align-items:center; justify-content:center;
+  font-size:28px;
+  animation: vl-logo-glow 2.8s ease-in-out infinite;
+}
+
+/* Arm = zero-size div rotated from center; dot hangs off the end */
+.vl-arm {
+  position:absolute; width:0; height:0; top:50%; left:50%;
+  animation: vl-orbit 3.4s linear infinite;
+}
+.vl-arm:nth-child(3) { animation-delay:-1.13s; }  /* 120° offset */
+.vl-arm:nth-child(4) { animation-delay:-2.27s; }  /* 240° offset */
+
+.vl-orb {
+  position:absolute;
+  width:12px; height:12px; border-radius:50%;
+  background:radial-gradient(circle at 35% 35%, #c084fc 0%, #7c3aed 100%);
+  box-shadow: 0 0 10px 4px rgba(168,85,247,0.60), 0 0 3px 1px rgba(168,85,247,0.90);
+  transform: translate(-50%,-50%) translateX(54px);
+}
+
+/* Slightly smaller trailing dots for depth */
+.vl-arm:nth-child(3) .vl-orb { width:9px; height:9px; opacity:0.75; transform:translate(-50%,-50%) translateX(54px); }
+.vl-arm:nth-child(4) .vl-orb { width:10px; height:10px; opacity:0.88; transform:translate(-50%,-50%) translateX(54px); }
+
+/* ── Text ── */
+.vl-ttl {
+  font-size:21px; font-weight:900; letter-spacing:.09em;
+  background:linear-gradient(135deg,#6d28d9,#a855f7);
+  -webkit-background-clip:text; -webkit-text-fill-color:transparent;
+  animation: vl-fadein .5s ease .1s both;
+}
+.vl-bar {
+  width:50px; height:2px; border-radius:2px;
+  background:linear-gradient(to right,transparent,#7c3aed,transparent);
+  animation: vl-fadein .5s ease .2s both;
+}
+.vl-sub2 {
+  font-size:11.5px; font-weight:700; letter-spacing:.07em; text-transform:uppercase;
+  color:#94a3b8; animation: vl-fadein .5s ease .3s both;
+}
+.vl-hint2 {
+  font-size:12px; color:#b8c0cc; font-style:italic;
+  animation: vl-fadein .5s ease .42s both;
+}
+</style>
+
+<div class="vl-scene">
+  <div class="vl-ring">
+    <div class="vl-track"></div>
+    <div class="vl-center-logo">💜</div>
+    <div class="vl-arm"><div class="vl-orb"></div></div>
+    <div class="vl-arm"><div class="vl-orb"></div></div>
+    <div class="vl-arm"><div class="vl-orb"></div></div>
+  </div>
+  <div class="vl-ttl">VIOLET BOT</div>
+  <div class="vl-bar"></div>
+  <div class="vl-sub2">Bath &amp; Body Works · Conversation Tester</div>
+  <div class="vl-hint2">Generate IDs, pick your filters, then start typing</div>
+</div>
+""", unsafe_allow_html=True)
     else:
       for turn, item in enumerate(st.session_state.chat_history, start=1):
         idx = turn - 1
