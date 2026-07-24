@@ -1010,6 +1010,59 @@ if st.session_state.get("dark_mode", False):
     </style>
   """, unsafe_allow_html=True)
 
+html("""<script>
+(function(){
+  var D = window.parent.document;
+  var IS_DARK = document.documentElement.getAttribute('data-dark') === 'true';
+
+  var FOCUS_LIGHT = {
+    border: '1.5px solid #7c3aed',
+    boxShadow: '0 0 0 3px rgba(124,58,237,0.22), 0 0 10px rgba(124,58,237,0.12)',
+    background: '#ffffff',
+  };
+  var FOCUS_DARK = {
+    border: '1.5px solid #a78bfa',
+    boxShadow: '0 0 0 3px rgba(167,139,250,0.22), 0 0 10px rgba(167,139,250,0.12)',
+    background: 'rgba(255,255,255,0.08)',
+  };
+
+  function applyFocus(wrap, on) {
+    var dark = D.querySelector('[data-testid="stSidebar"]') &&
+               window.getComputedStyle(D.querySelector('[data-testid="stSidebar"] > div:first-child')).backgroundColor.indexOf('20, 22') !== -1;
+    var F = dark ? FOCUS_DARK : FOCUS_LIGHT;
+    if (on) {
+      wrap.style.setProperty('border', F.border, 'important');
+      wrap.style.setProperty('box-shadow', F.boxShadow, 'important');
+      wrap.style.setProperty('background', F.background, 'important');
+      wrap.style.setProperty('transition', 'all 0.15s ease', 'important');
+    } else {
+      wrap.style.removeProperty('border');
+      wrap.style.removeProperty('box-shadow');
+      wrap.style.removeProperty('background');
+    }
+  }
+
+  function bindSidebarInputFocus() {
+    var sidebar = D.querySelector('[data-testid="stSidebar"]');
+    if (!sidebar) return;
+    sidebar.querySelectorAll('input[type="text"]:not([data-sfh])').forEach(function(inp) {
+      inp.setAttribute('data-sfh', '1');
+      /* BaseUI layers: [data-baseweb="base-input"] holds the visible border */
+      var wrap = inp.closest('[data-baseweb="base-input"]')
+              || inp.closest('[data-baseweb="input"]')
+              || inp.parentElement;
+      if (!wrap) return;
+      inp.addEventListener('focus', function() { applyFocus(wrap, true); });
+      inp.addEventListener('blur',  function() { applyFocus(wrap, false); });
+    });
+  }
+
+  bindSidebarInputFocus();
+  var obs = new MutationObserver(bindSidebarInputFocus);
+  obs.observe(D.body, { childList: true, subtree: true });
+})();
+</script>""", height=0)
+
 st.markdown("""
 <style>
   /* ── Magic sidebar buttons ── */
