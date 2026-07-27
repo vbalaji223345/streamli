@@ -2659,6 +2659,8 @@ html("""<script>
   var SR = W.SpeechRecognition || W.webkitSpeechRecognition;
   if (!SR) return;
 
+  var isEdge = /Edg\//.test(W.navigator.userAgent);
+
   if (W.__vRec) { try { W.__vRec.abort(); } catch(e) {} W.__vRec = null; }
 
   // Audio cue
@@ -2913,6 +2915,45 @@ html("""<script>
       if (sb && !sb.disabled) sb.click();
       beep(520, 0.18, 0.07);
     }, 150);
+  }
+
+  // Edge browser: voice not supported — show tooltip on hover, disable button
+  if (isEdge) {
+    btn.style.opacity = '0.45';
+    btn.style.cursor = 'not-allowed';
+    btn.style.filter = 'grayscale(0.9)';
+    var edgeTip = D.getElementById('__vedgetip__');
+    if (!edgeTip) {
+      edgeTip = D.createElement('div'); edgeTip.id = '__vedgetip__';
+      edgeTip.style.cssText =
+        'position:fixed;z-index:100002;background:#1e293b;color:#f1f5f9;' +
+        'font-size:12px;font-weight:500;font-family:sans-serif;' +
+        'padding:8px 14px;border-radius:8px;white-space:nowrap;' +
+        'box-shadow:0 4px 18px rgba(0,0,0,.30);pointer-events:none;display:none;' +
+        'border:1px solid rgba(100,116,139,.35);';
+      edgeTip.textContent = 'Voice works only in Chrome — open in Chrome for mic support';
+      D.body.appendChild(edgeTip);
+    }
+    btn.onmouseenter = function() {
+      edgeTip.style.display = 'block';
+      var br = btn.getBoundingClientRect();
+      setTimeout(function() {
+        var tw = edgeTip.offsetWidth;
+        edgeTip.style.bottom = (W.innerHeight - br.top + 10) + 'px';
+        edgeTip.style.right  = Math.max(8, W.innerWidth - br.right + Math.round((br.width - tw) / 2)) + 'px';
+        edgeTip.style.left   = 'auto';
+      }, 0);
+    };
+    btn.onmouseleave = function() { edgeTip.style.display = 'none'; };
+    if (W.__vmicHandler) btn.removeEventListener('click', W.__vmicHandler);
+    W.__vmicHandler = null;
+    if (W.__vmicKeyHandler) D.removeEventListener('keydown', W.__vmicKeyHandler);
+    W.__vmicKeyHandler = null;
+    positionMic();
+    if (W.__vmicResizeHandler) W.removeEventListener('resize', W.__vmicResizeHandler);
+    W.__vmicResizeHandler = function() { positionMic(); };
+    W.addEventListener('resize', W.__vmicResizeHandler);
+    return;
   }
 
   if (W.__vmicHandler) btn.removeEventListener('click', W.__vmicHandler);
