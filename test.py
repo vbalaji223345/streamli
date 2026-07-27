@@ -2376,9 +2376,9 @@ def render_history():
       st.markdown("""<style>
 [data-testid="stChatMessage"]:has(.vl-v-safe){background:rgba(34,197,94,.07)!important;border-left:3px solid rgba(34,197,94,.55)!important;border-radius:10px!important;}
 [data-testid="stChatMessage"]:has(.vl-v-high){background:rgba(239,68,68,.07)!important;border-left:3px solid rgba(239,68,68,.55)!important;border-radius:10px!important;}
-[data-testid="stChatMessage"]:has(.vl-v-low){background:rgba(245,158,11,.07)!important;border-left:3px solid rgba(245,158,11,.55)!important;border-radius:10px!important;}
-[data-testid="stChatMessage"]:has(.vl-v-cte){background:rgba(249,115,22,.07)!important;border-left:3px solid rgba(249,115,22,.55)!important;border-radius:10px!important;}
-[data-testid="stChatMessage"]:has(.vl-v-fe){background:rgba(168,85,247,.07)!important;border-left:3px solid rgba(168,85,247,.55)!important;border-radius:10px!important;}
+[data-testid="stChatMessage"]:has(.vl-v-low){background:rgba(249,115,22,.07)!important;border-left:3px solid rgba(249,115,22,.55)!important;border-radius:10px!important;}
+[data-testid="stChatMessage"]:has(.vl-v-cte){background:rgba(124,58,237,.07)!important;border-left:3px solid rgba(124,58,237,.55)!important;border-radius:10px!important;}
+[data-testid="stChatMessage"]:has(.vl-v-fe){background:rgba(59,130,246,.07)!important;border-left:3px solid rgba(59,130,246,.55)!important;border-radius:10px!important;}
 [data-testid="stChatMessage"]:has(.vl-v-unk){background:rgba(148,163,184,.07)!important;border-left:3px solid rgba(148,163,184,.55)!important;border-radius:10px!important;}
 </style>""", unsafe_allow_html=True)
 
