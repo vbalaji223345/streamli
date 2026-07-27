@@ -1433,6 +1433,7 @@ if "pending_manual_prompt" not in st.session_state:
   st.session_state.pending_manual_prompt = None
 if "pending_retry" not in st.session_state:
   st.session_state.pending_retry = None
+
 if "dark_mode" not in st.session_state:
   st.session_state.dark_mode = False
 
@@ -2372,11 +2373,33 @@ def render_history():
 </div>
 """, unsafe_allow_html=True)
     else:
+      st.markdown("""<style>
+[data-testid="stChatMessage"]:has(.vl-v-safe){background:rgba(34,197,94,.07)!important;border-left:3px solid rgba(34,197,94,.55)!important;border-radius:10px!important;}
+[data-testid="stChatMessage"]:has(.vl-v-high){background:rgba(239,68,68,.07)!important;border-left:3px solid rgba(239,68,68,.55)!important;border-radius:10px!important;}
+[data-testid="stChatMessage"]:has(.vl-v-low){background:rgba(245,158,11,.07)!important;border-left:3px solid rgba(245,158,11,.55)!important;border-radius:10px!important;}
+[data-testid="stChatMessage"]:has(.vl-v-cte){background:rgba(249,115,22,.07)!important;border-left:3px solid rgba(249,115,22,.55)!important;border-radius:10px!important;}
+[data-testid="stChatMessage"]:has(.vl-v-fe){background:rgba(168,85,247,.07)!important;border-left:3px solid rgba(168,85,247,.55)!important;border-radius:10px!important;}
+[data-testid="stChatMessage"]:has(.vl-v-unk){background:rgba(148,163,184,.07)!important;border-left:3px solid rgba(148,163,184,.55)!important;border-radius:10px!important;}
+</style>""", unsafe_allow_html=True)
+
+      _VCLASS = {
+        "RAI Safe": "vl-v-safe",
+        "RAI High Risk": "vl-v-high",
+        "RAI Low Risk": "vl-v-low",
+        "Customer Treatment Error": "vl-v-cte",
+        "Functional Error": "vl-v-fe",
+        "Unknown": "vl-v-unk",
+      }
+
       for turn, item in enumerate(st.session_state.chat_history, start=1):
         idx = turn - 1
+        _verdict = st.session_state.verdicts.get(idx, "")
+        _vclass  = _VCLASS.get(_verdict, "")
+        _vmark   = f'<span class="{_vclass}" style="display:none"></span>' if _vclass else ""
         avatar = "📄" if item.get("type") == "batch" else "🧑‍💻"
         with st.chat_message("user", avatar=avatar):
           st.write(item['prompt'])
+          if _vmark: st.markdown(_vmark, unsafe_allow_html=True)
         with st.chat_message("assistant", avatar="🤖"):
           _words = _chars = 0
           if item['response'].strip():
@@ -2393,6 +2416,7 @@ def render_history():
               if st.button("🔄 Retry", key=f"retry_{turn}"):
                 st.session_state.pending_retry = {"idx": idx, "prompt": item['prompt']}
                 st.rerun()
+          if _vmark: st.markdown(_vmark, unsafe_allow_html=True)
           if item.get("latency_ms") is not None:
             _wc_badge = f'<span style="font-size:11px;color:#888;font-family:monospace">&nbsp;&nbsp;📝 {_words} words · {_chars} chars</span>' if item['response'].strip() else ''
             st.markdown(latency_badge(item["latency_ms"], turn, item.get("timing_details")) + _wc_badge, unsafe_allow_html=True)
@@ -2425,6 +2449,26 @@ def render_history():
                 st.rerun()
 chat_container = st.container(height=400)
 render_history()
+
+# Show pending prompt + typing indicator while API call is in-flight
+if st.session_state.is_responding and st.session_state.get("pending_manual_prompt"):
+  with chat_container:
+    with st.chat_message("user", avatar="🧑"):
+      st.markdown(st.session_state.pending_manual_prompt)
+    with st.chat_message("assistant", avatar="🤖"):
+      st.markdown("""
+<style>
+@keyframes _vtyp{0%,60%,100%{transform:translateY(0);opacity:.35}30%{transform:translateY(-7px);opacity:1}}
+._vtyp-wrap{display:flex;gap:6px;padding:6px 2px;align-items:center}
+._vtyp-dot{width:9px;height:9px;border-radius:50%;background:#7c3aed;animation:_vtyp 1.3s ease-in-out infinite}
+._vtyp-dot:nth-child(2){animation-delay:.22s}
+._vtyp-dot:nth-child(3){animation-delay:.44s}
+._vtyp-lbl{font-size:12px;color:#7c3aed;margin-left:8px;font-style:italic;letter-spacing:.3px}
+</style>
+<div class="_vtyp-wrap">
+  <div class="_vtyp-dot"></div><div class="_vtyp-dot"></div><div class="_vtyp-dot"></div>
+  <span class="_vtyp-lbl">Violet is thinking…</span>
+</div>""", unsafe_allow_html=True)
 
 html("""<script>
 (function(){
@@ -2469,6 +2513,7 @@ if st.session_state.pending_retry:
 # -------------------------
 # 7. Manual Input Logic (UPDATED)
 # -------------------------
+
 if prompt := st.chat_input("Message Violet...", disabled=st.session_state.is_processing or st.session_state.is_responding):
   st.session_state.pending_manual_prompt = prompt
 
@@ -2478,12 +2523,13 @@ if prompt := st.chat_input("Message Violet...", disabled=st.session_state.is_pro
 if st.session_state.is_responding and st.session_state.pending_manual_prompt:
   prompt = st.session_state.pending_manual_prompt
   st.session_state.pending_manual_prompt = None
-  with st.spinner("Violet is thinking..."):
-    response, latency_ms, timing_details = call_model(prompt, u_id, s_id)
+  _src = "voice" if prompt.startswith("\u200b") else "manual"
+  prompt = prompt.lstrip("\u200b")
+  response, latency_ms, timing_details = call_model(prompt, u_id, s_id)
   _turn_id = len(st.session_state.chat_history) + 1
-  st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response, "latency_ms": latency_ms, "timing_details": timing_details})
+  st.session_state.chat_history.append({"source": _src, "prompt": prompt, "response": response, "latency_ms": latency_ms, "timing_details": timing_details})
   st.session_state.results.append({
-    "Source": "manual",
+    "Source": _src,
     "Dimensions": _clean_dd(st.session_state.get("dd1", "")),
     "Testing Topics": _clean_dd(st.session_state.get("dd2", "")),
     "Testing Category": _clean_dd(st.session_state.get("dd3", "")),
@@ -2601,3 +2647,368 @@ if st.session_state.batch_pending and uploaded_file is not None:
   except Exception as e:
     st.session_state.is_processing = False
     status_area.error(f"Error: {e}")
+
+# -------------------------
+# 9. Voice Button
+# -------------------------
+
+html("""<script>
+(function () {
+  var D = window.parent.document;
+  var W = window.parent;
+  var SR = W.SpeechRecognition || W.webkitSpeechRecognition;
+  if (!SR) return;
+
+  if (W.__vRec) { try { W.__vRec.abort(); } catch(e) {} W.__vRec = null; }
+
+  // Audio cue
+  function beep(freq, dur, vol) {
+    try {
+      var ctx = new (W.AudioContext || W.webkitAudioContext)();
+      var osc = ctx.createOscillator(); var g = ctx.createGain();
+      osc.connect(g); g.connect(ctx.destination);
+      osc.frequency.value = freq; osc.type = 'sine';
+      g.gain.setValueAtTime(vol || 0.08, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      osc.start(ctx.currentTime); osc.stop(ctx.currentTime + dur);
+    } catch(e) {}
+  }
+
+  // Toast
+  function showToast(msg, type) {
+    var t = D.getElementById('__vtoast__');
+    if (!t) { t = D.createElement('div'); t.id = '__vtoast__'; D.body.appendChild(t); }
+    var isErr = type === 'error';
+    t.style.cssText =
+      'position:fixed;bottom:90px;right:20px;z-index:100000;padding:10px 16px;' +
+      'border-radius:10px;font-size:13px;font-weight:500;font-family:sans-serif;' +
+      'box-shadow:0 4px 16px rgba(0,0,0,.15);max-width:300px;transition:opacity .3s;' +
+      (isErr ? 'background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;'
+             : 'background:#fef3c7;color:#92400e;border:1px solid #fcd34d;');
+    t.textContent = msg; t.style.opacity = '1'; t.style.display = 'block';
+    clearTimeout(W.__vtoastTimer);
+    W.__vtoastTimer = setTimeout(function() {
+      t.style.opacity = '0'; setTimeout(function() { t.style.display = 'none'; }, 300);
+    }, 4000);
+  }
+
+  // Keyframes + ring drain animation (once)
+  var CIRC = +(2 * Math.PI * 21).toFixed(1);
+  if (!D.getElementById('__vmickf__')) {
+    var ks = D.createElement('style'); ks.id = '__vmickf__';
+    ks.textContent =
+      '@keyframes __vmicpulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.5)}70%{box-shadow:0 0 0 8px rgba(239,68,68,0)}}' +
+      '@keyframes __vringdrain{from{stroke-dashoffset:0}to{stroke-dashoffset:' + CIRC + '}}';
+    D.head.appendChild(ks);
+  }
+
+  // Mic button
+  var btn = D.getElementById('__vmic__');
+  if (!btn) {
+    btn = D.createElement('button'); btn.id = '__vmic__';
+    btn.style.cssText =
+      'position:fixed;bottom:22px;right:16px;z-index:99999;' +
+      'width:42px;height:42px;border-radius:50%;border:2px solid rgba(124,58,237,.55);' +
+      'background:rgba(245,243,255,.97);cursor:pointer;font-size:20px;' +
+      'display:flex;align-items:center;justify-content:center;' +
+      'box-shadow:0 2px 10px rgba(124,58,237,.20);transition:background .2s,border-color .2s,transform .15s;';
+    btn.innerHTML = '🎙️';
+    D.body.appendChild(btn);
+  }
+
+  // Countdown ring SVG overlay (exact same position as button)
+  var ringEl = D.getElementById('__vring__');
+  if (!ringEl) {
+    var ns = 'http://www.w3.org/2000/svg';
+    ringEl = D.createElementNS(ns, 'svg');
+    ringEl.id = '__vring__';
+    ringEl.setAttribute('viewBox', '0 0 46 46');
+    ringEl.style.cssText =
+      'position:fixed;bottom:19px;right:13px;z-index:100001;' +
+      'width:48px;height:48px;pointer-events:none;display:none;transform:rotate(-90deg);';
+    var rc = D.createElementNS(ns, 'circle');
+    rc.id = '__vringc__';
+    rc.setAttribute('cx','23'); rc.setAttribute('cy','23'); rc.setAttribute('r','21');
+    rc.setAttribute('fill','none'); rc.setAttribute('stroke','#7c3aed');
+    rc.setAttribute('stroke-width','3'); rc.setAttribute('stroke-linecap','round');
+    rc.setAttribute('stroke-dasharray', CIRC); rc.setAttribute('stroke-dashoffset', CIRC);
+    ringEl.appendChild(rc);
+    D.body.appendChild(ringEl);
+  }
+  var ringC = D.getElementById('__vringc__');
+
+  function startRing(ms) {
+    if (!ringC) return;
+    ringEl.style.display = 'block';
+    ringC.style.animation = 'none';
+    ringC.setAttribute('stroke-dashoffset', '0');
+    ringC.getBoundingClientRect();
+    ringC.style.animation = '__vringdrain ' + ms + 'ms linear forwards';
+  }
+  function resetRing() {
+    if (!ringC) return;
+    ringC.style.animation = 'none';
+    ringEl.style.display = 'none';
+  }
+
+  // Waveform canvas (above the button)
+  var wvCv = D.getElementById('__vwave__');
+  if (!wvCv) {
+    wvCv = D.createElement('canvas'); wvCv.id = '__vwave__';
+    wvCv.width = 52; wvCv.height = 26;
+    wvCv.style.cssText =
+      'position:fixed;bottom:70px;right:16px;z-index:99998;display:none;' +
+      'border-radius:8px;background:rgba(245,243,255,.93);' +
+      'box-shadow:0 2px 8px rgba(124,58,237,.18);';
+    D.body.appendChild(wvCv);
+  }
+  var wvCtx = wvCv.getContext('2d');
+
+  // Dynamic positioning — snap button to just left of Streamlit's submit button
+  function positionMic() {
+    var sb = D.querySelector('[data-testid="stChatInputSubmitButton"]');
+    if (!sb) { setTimeout(positionMic, 300); return; }
+    var r = sb.getBoundingClientRect();
+    if (!r.width) { setTimeout(positionMic, 300); return; }
+    var wh = W.innerHeight, ww = W.innerWidth;
+    var bBottom = Math.round(wh - r.bottom + (r.height - 42) / 2);
+    var bRight  = Math.round(ww - r.left + 8);
+    btn.style.bottom    = bBottom + 'px';
+    btn.style.right     = bRight  + 'px';
+    ringEl.style.bottom = (bBottom - 3) + 'px';
+    ringEl.style.right  = (bRight  - 3) + 'px';
+    wvCv.style.bottom   = (bBottom + 48) + 'px';
+    wvCv.style.right    = (bRight  - 5)  + 'px';
+    if (preview) {
+      preview.style.bottom = (bBottom + 48) + 'px';
+      preview.style.right  = bRight + 'px';
+    }
+  }
+
+  function startWaveform() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    navigator.mediaDevices.getUserMedia({audio:true,video:false}).then(function(stream) {
+      if (!W.__vRec) { stream.getTracks().forEach(function(t){t.stop();}); return; }
+      W.__vStream = stream;
+      W.__vACtx = new (W.AudioContext || W.webkitAudioContext)();
+      W.__vAnal = W.__vACtx.createAnalyser();
+      W.__vAnal.fftSize = 32;
+      W.__vACtx.createMediaStreamSource(stream).connect(W.__vAnal);
+      wvCv.style.display = 'block';
+      drawWave();
+    }).catch(function(){});
+  }
+
+  function stopWaveform() {
+    if (W.__vRAF)    { cancelAnimationFrame(W.__vRAF); W.__vRAF = null; }
+    if (W.__vStream) { W.__vStream.getTracks().forEach(function(t){t.stop();}); W.__vStream = null; }
+    if (W.__vACtx)   { try{W.__vACtx.close();}catch(e){} W.__vACtx = null; }
+    W.__vAnal = null;
+    wvCv.style.display = 'none';
+    wvCtx.clearRect(0, 0, wvCv.width, wvCv.height);
+  }
+
+  function drawWave() {
+    if (!W.__vAnal) return;
+    W.__vRAF = requestAnimationFrame(drawWave);
+    var n = W.__vAnal.frequencyBinCount;
+    var d = new Uint8Array(n);
+    W.__vAnal.getByteFrequencyData(d);
+    // Draw frequency bars
+    wvCtx.clearRect(0, 0, wvCv.width, wvCv.height);
+    var bw = Math.floor(wvCv.width / n) - 1;
+    var sum = 0;
+    for (var i = 0; i < n; i++) {
+      var v = d[i] / 255;
+      sum += v;
+      var h = Math.max(2, v * (wvCv.height - 4));
+      wvCtx.fillStyle = 'rgba(124,58,237,' + (0.35 + v * 0.65) + ')';
+      wvCtx.fillRect(i * (bw + 1), (wvCv.height - h) / 2, bw, h);
+    }
+    // Scale button with average volume (feature 1)
+    var avgVol = sum / n;
+    var scale = 1.08 + avgVol * 0.18;
+    btn.style.transform = 'scale(' + scale.toFixed(3) + ')';
+  }
+
+  // Transcript preview chip
+  var preview = D.getElementById('__vpreview__');
+  if (!preview) {
+    preview = D.createElement('div'); preview.id = '__vpreview__';
+    preview.style.cssText =
+      'position:fixed;bottom:72px;right:20px;z-index:99998;max-width:240px;' +
+      'padding:7px 12px;border-radius:10px;display:none;word-wrap:break-word;' +
+      'background:rgba(245,243,255,.97);border:1px solid rgba(124,58,237,.25);' +
+      'font-size:12px;color:#4c1d95;font-family:sans-serif;line-height:1.5;' +
+      'box-shadow:0 2px 12px rgba(124,58,237,.12);max-height:80px;overflow:hidden;';
+    D.body.appendChild(preview);
+  }
+
+
+  // Elapsed timer badge
+  var timerBadge = D.getElementById('__vtimer__');
+  if (!timerBadge) {
+    timerBadge = D.createElement('div'); timerBadge.id = '__vtimer__';
+    timerBadge.style.cssText =
+      'position:fixed;z-index:100002;display:none;pointer-events:none;' +
+      'font-size:9px;font-weight:700;font-family:monospace;color:#ef4444;' +
+      'background:rgba(255,255,255,.92);border:1px solid rgba(239,68,68,.4);' +
+      'border-radius:4px;padding:1px 3px;line-height:1.4;letter-spacing:.3px;';
+    D.body.appendChild(timerBadge);
+  }
+
+  function startTimer() {
+    clearInterval(W.__vTimerInt);
+    var t0 = Date.now();
+    function tick() {
+      var s = Math.floor((Date.now() - t0) / 1000);
+      var mm = Math.floor(s / 60), ss = s % 60;
+      timerBadge.textContent = mm + ':' + (ss < 10 ? '0' : '') + ss;
+      var r = btn.getBoundingClientRect();
+      timerBadge.style.top  = (r.top  - 8) + 'px';
+      timerBadge.style.left = (r.right - 8) + 'px';
+    }
+    timerBadge.textContent = '0:00';
+    timerBadge.style.display = 'block';
+    var r0 = btn.getBoundingClientRect();
+    timerBadge.style.top  = (r0.top  - 8) + 'px';
+    timerBadge.style.left = (r0.right - 8) + 'px';
+    W.__vTimerInt = setInterval(tick, 1000);
+  }
+
+  function stopTimer() {
+    clearInterval(W.__vTimerInt); W.__vTimerInt = null;
+    timerBadge.style.display = 'none';
+  }
+  function setIdle() {
+    btn.innerHTML = '🎙️';
+    btn.title = 'Click to speak  (or press Space)';
+    btn.style.background = 'rgba(245,243,255,.97)';
+    btn.style.borderColor = 'rgba(124,58,237,.55)';
+    btn.style.animation = 'none'; btn.style.transform = 'scale(1)';
+    preview.style.display = 'none'; preview.textContent = '';
+    stopWaveform(); resetRing(); stopTimer();
+  }
+
+  function setListening() {
+    btn.innerHTML = '🔴';
+    btn.title = 'Listening\u2026 click or Space to send now';
+    btn.style.background = 'rgba(254,226,226,.97)';
+    btn.style.borderColor = 'rgba(239,68,68,.70)';
+    btn.style.animation = '__vmicpulse 1.2s ease-out infinite';
+    btn.style.transform = 'scale(1.08)';
+  }
+
+  function submit(text) {
+    var ta = D.querySelector('[data-testid="stChatInput"] textarea');
+    if (!ta || ta.disabled) return;
+    var setter = Object.getOwnPropertyDescriptor(W.HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(ta, '\u200b' + text);
+    ta.dispatchEvent(new W.Event('input', {bubbles:true, cancelable:true}));
+    ta.focus();
+    setTimeout(function () {
+      ta.dispatchEvent(new W.KeyboardEvent('keydown',
+        {key:'Enter',code:'Enter',keyCode:13,which:13,bubbles:true,cancelable:true}));
+      var sb = D.querySelector('[data-testid="stChatInputSubmitButton"]');
+      if (sb && !sb.disabled) sb.click();
+      beep(520, 0.18, 0.07);
+    }, 150);
+  }
+
+  if (W.__vmicHandler) btn.removeEventListener('click', W.__vmicHandler);
+
+  // Write text to chat textarea live (no submit)
+  function setTA(text) {
+    var ta = D.querySelector('[data-testid="stChatInput"] textarea');
+    if (!ta) return;
+    var setter = Object.getOwnPropertyDescriptor(W.HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(ta, text);
+    ta.dispatchEvent(new W.Event('input', {bubbles:true, cancelable:true}));
+  }
+
+  W.__vmicHandler = function () {
+    if (W.__vRec) { W.__vmicDoSubmit && W.__vmicDoSubmit(); return; }
+
+    var taEl = D.querySelector('[data-testid="stChatInput"] textarea');
+    var savedText = taEl ? taEl.value : '';
+
+    var finalText = '', lastInterim = '', silenceTimer = null, submitted = false;
+    var SILENCE_MS = 900;
+
+    function doSubmit() {
+      if (submitted) return;
+      submitted = true;
+      clearTimeout(silenceTimer);
+      var text = (finalText + lastInterim).trim();
+      try { W.__vRec.stop(); } catch(e) {}
+      W.__vRec = null; W.__vmicDoSubmit = null;
+      setIdle();
+      if (text) { submit(text); } else { setTA(savedText); }
+    }
+    W.__vmicDoSubmit = doSubmit;
+
+    var r = new SR();
+    r.continuous = true; r.interimResults = true;
+    r.lang = 'en-US'; r.maxAlternatives = 1;
+
+    r.onstart = function () {
+      setListening(); beep(880, 0.12, 0.08); startWaveform(); startTimer();
+      setTA('');
+    };
+
+    r.onresult = function (ev) {
+      clearTimeout(silenceTimer);
+      resetRing();
+      for (var i = ev.resultIndex; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) { finalText += ev.results[i][0].transcript + ' '; lastInterim = ''; }
+        else { lastInterim = ev.results[i][0].transcript; }
+      }
+      var combined = (finalText + lastInterim).trim();
+      setTA(combined);
+      var w = combined ? combined.split(/\s+/).length : 0;
+      btn.title = 'Listening\u2026 ' + w + ' word' + (w !== 1 ? 's' : '') + ' \u2014 click/Space to send';
+      silenceTimer = setTimeout(doSubmit, SILENCE_MS);
+      startRing(SILENCE_MS);
+    };
+
+    r.onerror = function (e) {
+      if (e.error === 'aborted') return;
+      clearTimeout(silenceTimer); W.__vRec = null; W.__vmicDoSubmit = null;
+      setTA(savedText); setIdle();
+      if (e.error === 'not-allowed' || e.error === 'permission-denied')
+        showToast('🎙️ Mic access denied \u2014 allow microphone in browser settings', 'error');
+      else if (e.error === 'no-speech')
+        showToast('No speech detected \u2014 try again', 'warn');
+    };
+
+    r.onend = function () {
+      if (!submitted) {
+        submitted = true; clearTimeout(silenceTimer);
+        W.__vRec = null; W.__vmicDoSubmit = null;
+        setTA(savedText); setIdle();
+      }
+    };
+
+    try { r.start(); W.__vRec = r; } catch(e) { setTA(savedText); setIdle(); }
+  };
+
+  btn.addEventListener('click', W.__vmicHandler);
+
+  if (W.__vmicKeyHandler) D.removeEventListener('keydown', W.__vmicKeyHandler);
+  W.__vmicKeyHandler = function (e) {
+    if (e.code !== 'Space' && e.key !== ' ') return;
+    var a = D.activeElement;
+    if (a && (a.tagName === 'TEXTAREA' || a.tagName === 'INPUT')) return;
+    e.preventDefault();
+    W.__vmicHandler && W.__vmicHandler();
+  };
+  D.addEventListener('keydown', W.__vmicKeyHandler);
+
+  positionMic();
+  if (W.__vmicResizeHandler) W.removeEventListener('resize', W.__vmicResizeHandler);
+  W.__vmicResizeHandler = function() { positionMic(); };
+  W.addEventListener('resize', W.__vmicResizeHandler);
+
+  setIdle();
+})();
+</script>""", height=0)
