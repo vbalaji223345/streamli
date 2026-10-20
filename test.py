@@ -1433,7 +1433,6 @@ if "pending_manual_prompt" not in st.session_state:
   st.session_state.pending_manual_prompt = None
 if "pending_retry" not in st.session_state:
   st.session_state.pending_retry = None
-
 if "dark_mode" not in st.session_state:
   st.session_state.dark_mode = False
 
@@ -2373,33 +2372,11 @@ def render_history():
 </div>
 """, unsafe_allow_html=True)
     else:
-      st.markdown("""<style>
-[data-testid="stChatMessage"]:has(.vl-v-safe){background:rgba(34,197,94,.07)!important;border-left:3px solid rgba(34,197,94,.55)!important;border-radius:10px!important;}
-[data-testid="stChatMessage"]:has(.vl-v-high){background:rgba(239,68,68,.07)!important;border-left:3px solid rgba(239,68,68,.55)!important;border-radius:10px!important;}
-[data-testid="stChatMessage"]:has(.vl-v-low){background:rgba(249,115,22,.07)!important;border-left:3px solid rgba(249,115,22,.55)!important;border-radius:10px!important;}
-[data-testid="stChatMessage"]:has(.vl-v-cte){background:rgba(124,58,237,.07)!important;border-left:3px solid rgba(124,58,237,.55)!important;border-radius:10px!important;}
-[data-testid="stChatMessage"]:has(.vl-v-fe){background:rgba(59,130,246,.07)!important;border-left:3px solid rgba(59,130,246,.55)!important;border-radius:10px!important;}
-[data-testid="stChatMessage"]:has(.vl-v-unk){background:rgba(148,163,184,.07)!important;border-left:3px solid rgba(148,163,184,.55)!important;border-radius:10px!important;}
-</style>""", unsafe_allow_html=True)
-
-      _VCLASS = {
-        "RAI Safe": "vl-v-safe",
-        "RAI High Risk": "vl-v-high",
-        "RAI Low Risk": "vl-v-low",
-        "Customer Treatment Error": "vl-v-cte",
-        "Functional Error": "vl-v-fe",
-        "Unknown": "vl-v-unk",
-      }
-
       for turn, item in enumerate(st.session_state.chat_history, start=1):
         idx = turn - 1
-        _verdict = st.session_state.verdicts.get(idx, "")
-        _vclass  = _VCLASS.get(_verdict, "")
-        _vmark   = f'<span class="{_vclass}" style="display:none"></span>' if _vclass else ""
         avatar = "📄" if item.get("type") == "batch" else "🧑‍💻"
         with st.chat_message("user", avatar=avatar):
           st.write(item['prompt'])
-          if _vmark: st.markdown(_vmark, unsafe_allow_html=True)
         with st.chat_message("assistant", avatar="🤖"):
           _words = _chars = 0
           if item['response'].strip():
@@ -2416,7 +2393,6 @@ def render_history():
               if st.button("🔄 Retry", key=f"retry_{turn}"):
                 st.session_state.pending_retry = {"idx": idx, "prompt": item['prompt']}
                 st.rerun()
-          if _vmark: st.markdown(_vmark, unsafe_allow_html=True)
           if item.get("latency_ms") is not None:
             _wc_badge = f'<span style="font-size:11px;color:#888;font-family:monospace">&nbsp;&nbsp;📝 {_words} words · {_chars} chars</span>' if item['response'].strip() else ''
             st.markdown(latency_badge(item["latency_ms"], turn, item.get("timing_details")) + _wc_badge, unsafe_allow_html=True)
@@ -2449,26 +2425,6 @@ def render_history():
                 st.rerun()
 chat_container = st.container(height=400)
 render_history()
-
-# Show pending prompt + typing indicator while API call is in-flight
-if st.session_state.is_responding and st.session_state.get("pending_manual_prompt"):
-  with chat_container:
-    with st.chat_message("user", avatar="🧑"):
-      st.markdown(st.session_state.pending_manual_prompt)
-    with st.chat_message("assistant", avatar="🤖"):
-      st.markdown("""
-<style>
-@keyframes _vtyp{0%,60%,100%{transform:translateY(0);opacity:.35}30%{transform:translateY(-7px);opacity:1}}
-._vtyp-wrap{display:flex;gap:6px;padding:6px 2px;align-items:center}
-._vtyp-dot{width:9px;height:9px;border-radius:50%;background:#7c3aed;animation:_vtyp 1.3s ease-in-out infinite}
-._vtyp-dot:nth-child(2){animation-delay:.22s}
-._vtyp-dot:nth-child(3){animation-delay:.44s}
-._vtyp-lbl{font-size:12px;color:#7c3aed;margin-left:8px;font-style:italic;letter-spacing:.3px}
-</style>
-<div class="_vtyp-wrap">
-  <div class="_vtyp-dot"></div><div class="_vtyp-dot"></div><div class="_vtyp-dot"></div>
-  <span class="_vtyp-lbl">Violet is thinking…</span>
-</div>""", unsafe_allow_html=True)
 
 html("""<script>
 (function(){
@@ -2513,7 +2469,6 @@ if st.session_state.pending_retry:
 # -------------------------
 # 7. Manual Input Logic (UPDATED)
 # -------------------------
-
 if prompt := st.chat_input("Message Violet...", disabled=st.session_state.is_processing or st.session_state.is_responding):
   st.session_state.pending_manual_prompt = prompt
 
@@ -2523,7 +2478,8 @@ if prompt := st.chat_input("Message Violet...", disabled=st.session_state.is_pro
 if st.session_state.is_responding and st.session_state.pending_manual_prompt:
   prompt = st.session_state.pending_manual_prompt
   st.session_state.pending_manual_prompt = None
-  response, latency_ms, timing_details = call_model(prompt, u_id, s_id)
+  with st.spinner("Violet is thinking..."):
+    response, latency_ms, timing_details = call_model(prompt, u_id, s_id)
   _turn_id = len(st.session_state.chat_history) + 1
   st.session_state.chat_history.append({"source": "manual", "prompt": prompt, "response": response, "latency_ms": latency_ms, "timing_details": timing_details})
   st.session_state.results.append({
