@@ -68,7 +68,7 @@ hide_st_style = """
 st.markdown(hide_st_style,unsafe_allow_html=True)
 
 html(
-    """
+    r"""
     <script>
     window.parent.document.querySelectorAll('[href*="streamlit.io"]').forEach(e => e.setAttribute("style", "display: none;"));
 
@@ -1435,6 +1435,23 @@ if "pending_retry" not in st.session_state:
   st.session_state.pending_retry = None
 if "dark_mode" not in st.session_state:
   st.session_state.dark_mode = False
+# Grouped multi-turn batch engine (ported from tt.py) + batch-mode selector
+if "batch_mode" not in st.session_state:
+  st.session_state.batch_mode = "Single Session"
+if "batch_groups" not in st.session_state:
+  st.session_state.batch_groups = []
+if "batch_group_idx" not in st.session_state:
+  st.session_state.batch_group_idx = 0
+if "batch_awaiting_gate" not in st.session_state:
+  st.session_state.batch_awaiting_gate = False
+if "batch_run_group" not in st.session_state:
+  st.session_state.batch_run_group = False
+if "batch_gate_decision" not in st.session_state:
+  st.session_state.batch_gate_decision = None
+if "batch_gate_turn1_text" not in st.session_state:
+  st.session_state.batch_gate_turn1_text = ""
+if "batch_primer_text" not in st.session_state:
+  st.session_state.batch_primer_text = "Hi"
 
 
 # -------------------------
@@ -1526,6 +1543,12 @@ with st.sidebar:
     st.session_state.verdicts = {}
     st.session_state.processing_done = False
     st.session_state.is_processing = False
+    st.session_state.batch_pending = False
+    st.session_state.batch_groups = []
+    st.session_state.batch_group_idx = 0
+    st.session_state.batch_awaiting_gate = False
+    st.session_state.batch_run_group = False
+    st.session_state.batch_gate_decision = None
     for _dd in ["dd1", "dd2", "dd3", "dd4", "dd5"]:
       st.session_state[_dd] = "— Select —"
     st.rerun()
@@ -1536,6 +1559,12 @@ with st.sidebar:
     st.session_state.verdicts = {}
     st.session_state.processing_done = False
     st.session_state.is_processing = False
+    st.session_state.batch_pending = False
+    st.session_state.batch_groups = []
+    st.session_state.batch_group_idx = 0
+    st.session_state.batch_awaiting_gate = False
+    st.session_state.batch_run_group = False
+    st.session_state.batch_gate_decision = None
     for _dd in ["dd1", "dd2", "dd3", "dd4", "dd5"]:
       st.session_state[_dd] = "— Select —"
     st.rerun()
@@ -1544,8 +1573,20 @@ with st.sidebar:
   
   st.subheader("📄 Batch Processing")
   uploaded_file = st.file_uploader("Upload CSV or Excel", type=["csv", "xlsx", "xls"])
-  prompt_col = st.text_input("Column name", value="prompt")
-  
+  st.radio(
+    "Batch mode",
+    ["Single Session", "Multi Session"],
+    key="batch_mode",
+    help=("Flat: send every row of one column under the current IDs.  "
+          "Grouped: group by `prompt id`, run each conversation's turns with a "
+          "decision gate and fresh IDs per conversation."),
+  )
+  if st.session_state.batch_mode == "Single Session":
+    prompt_col = st.text_input("Column name", value="prompt")
+  else:
+    prompt_col = "prompt"  # default so flat code paths never see an undefined var
+    st.caption("Required columns: `prompt id`, `turn id`, `prompt`")
+
   start_clicked = st.button(
     "▶️ Start Batch Process",
     disabled=(uploaded_file is None or st.session_state.is_processing),
@@ -1581,7 +1622,7 @@ with st.sidebar:
           lambda v: v if (isinstance(v, str) and v.strip()) else _latest
         )
     _col_order = ["Source", "Date Tested", "Dimensions", "Testing Topics", "Testing Category",
-                  "Turn id", "Perturb-Tech", "Use Case", "User Id", "Session Id",
+                  "Prompt id", "Turn id", "Perturb-Tech", "Use Case", "User Id", "Session Id",
                   "Prompt", "Response", "Verdicts", "Latency", "Time Details"]
     res_df = res_df.reindex(columns=[c for c in _col_order if c in res_df.columns])
     # Clean text columns and fill NaN so openpyxl doesn't choke
@@ -2292,10 +2333,15 @@ _verdict_options = [
   "Unknown", "Customer Treatment Error", "Functional Error",
 ]
 
-def render_history():
+def render_history(only_group=None):
   with chat_container:
-    if not st.session_state.chat_history:
-      st.markdown("""
+    items = list(enumerate(st.session_state.chat_history))  # global index -> item
+    if only_group is not None:
+      items = [(i, it) for i, it in items if it.get("gidx") == only_group]
+
+    if not items:
+      if not st.session_state.chat_history:
+        st.markdown("""
 <style>
 @keyframes vl-float {
   0%,100% { transform: translateY(0px); }
@@ -2371,9 +2417,13 @@ def render_history():
   </div>
 </div>
 """, unsafe_allow_html=True)
+      elif only_group is not None:
+        st.caption("🧹 Chat cleared for new session.")
     else:
-      for turn, item in enumerate(st.session_state.chat_history, start=1):
-        idx = turn - 1
+      for i, item in items:
+        turn = i + 1            # global index — used ONLY for widget keys & verdict storage
+        idx = i
+        disp_turn = item.get("turn id") or turn   # shown to the user (sheet turn id in batch)
         avatar = "📄" if item.get("type") == "batch" else "🧑‍💻"
         with st.chat_message("user", avatar=avatar):
           st.write(item['prompt'])
@@ -2395,7 +2445,7 @@ def render_history():
                 st.rerun()
           if item.get("latency_ms") is not None:
             _wc_badge = f'<span style="font-size:11px;color:#888;font-family:monospace">&nbsp;&nbsp;📝 {_words} words · {_chars} chars</span>' if item['response'].strip() else ''
-            st.markdown(latency_badge(item["latency_ms"], turn, item.get("timing_details")) + _wc_badge, unsafe_allow_html=True)
+            st.markdown(latency_badge(item["latency_ms"], disp_turn, item.get("timing_details")) + _wc_badge, unsafe_allow_html=True)
 
           if item['response'].strip():
             current = st.session_state.verdicts.get(idx, "")
@@ -2418,13 +2468,18 @@ def render_history():
               if clicked:
                 if current == opt:
                   st.session_state.verdicts[idx] = ""
-                  st.toast(f"Verdict cleared for Turn {turn}", icon="🗑️")
+                  st.toast(f"Verdict cleared for Turn {disp_turn}", icon="🗑️")
                 else:
                   st.session_state.verdicts[idx] = opt
-                  st.toast(f"Turn {turn} → {opt}", icon="✅")
+                  st.toast(f"Turn {disp_turn} → {opt}", icon="✅")
                 st.rerun()
 chat_container = st.container(height=400)
-render_history()
+# During a grouped batch, show only the current conversation's turns.
+# Otherwise show the full history so verdicts can be assigned across everything.
+if st.session_state.is_processing and st.session_state.batch_groups:
+  render_history(only_group=st.session_state.batch_group_idx)
+else:
+  render_history()
 
 html("""<script>
 (function(){
@@ -2487,6 +2542,7 @@ if st.session_state.is_responding and st.session_state.pending_manual_prompt:
     "Dimensions": _clean_dd(st.session_state.get("dd1", "")),
     "Testing Topics": _clean_dd(st.session_state.get("dd2", "")),
     "Testing Category": _clean_dd(st.session_state.get("dd3", "")),
+    "Prompt id": "",
     "Turn id": _turn_id,
     "Perturb-Tech": _clean_dd(st.session_state.get("dd4", "")),
     "Use Case": _clean_dd(st.session_state.get("dd5", "")),
@@ -2501,15 +2557,78 @@ if st.session_state.is_responding and st.session_state.pending_manual_prompt:
   st.rerun()
 
 # -------------------------
-# 8. CSV Batch Logic (UPDATED)
+# 8. CSV Batch Logic — two modes:
+#   • Single Session      — send every row of one column under the current IDs.
+#   • Multi Session — group by `prompt id`, run each conversation's turns
+#       with a per-conversation decision gate and fresh IDs. (ported from tt.py)
 # -------------------------
-if start_clicked and uploaded_file is not None:
-  st.session_state.is_processing = True
-  st.session_state.batch_pending = True
-  st.session_state.processing_done = False
-  st.rerun()
 
-if st.session_state.batch_pending and uploaded_file is not None:
+# --- 8a. Start: dispatch on the selected batch mode ---
+if start_clicked and uploaded_file is not None:
+  if st.session_state.batch_mode == "Single Session":
+    # Reset any grouped-batch state so the two engines never overlap.
+    st.session_state.batch_groups = []
+    st.session_state.batch_awaiting_gate = False
+    st.session_state.batch_run_group = False
+    st.session_state.batch_gate_decision = None
+    st.session_state.is_processing = True
+    st.session_state.batch_pending = True
+    st.session_state.processing_done = False
+    st.rerun()
+  else:
+    # Grouped mode: read + clean + group, then halt at the first gate.
+    st.session_state.batch_pending = False
+    REQUIRED_COLS = ["prompt id", "turn id", "prompt"]
+    try:
+      fname = uploaded_file.name.lower()
+      if fname.endswith((".xlsx", ".xls")):
+        df = pd.read_excel(uploaded_file, dtype=str)
+      else:
+        df = pd.read_csv(uploaded_file, dtype=str, encoding="utf-8-sig")
+
+      df.columns = [str(c).lstrip("﻿").strip() for c in df.columns]
+      missing = [c for c in REQUIRED_COLS if c not in df.columns]
+      if missing:
+        status_area.error(f"Missing column(s): {', '.join(missing)}. Required: prompt id, turn id, prompt.")
+      else:
+        df = df[df["prompt"].notna()].copy()
+        df["prompt"] = df["prompt"].astype(str).str.strip()
+        df = df[df["prompt"] != ""]
+        df["prompt id"] = df["prompt id"].astype(str).str.strip()
+
+        def _turn_key(v):
+          try:
+            return int(float(str(v).strip()))
+          except Exception:
+            return 10**9
+
+        df["_turn_sort"] = df["turn id"].map(_turn_key)
+        group_order = list(dict.fromkeys(df["prompt id"].tolist()))
+
+        groups = []
+        for pid in group_order:
+          g = df[df["prompt id"] == pid].sort_values("_turn_sort", kind="stable")
+          turns = [{"turn id": r["turn id"], "prompt": r["prompt"]} for _, r in g.iterrows()]
+          groups.append({"pid": pid, "turns": turns})
+
+        if not groups:
+          status_area.error("No usable rows (empty 'prompt' column).")
+        else:
+          st.session_state.batch_groups = groups
+          st.session_state.batch_group_idx = 0
+          st.session_state.is_processing = True
+          st.session_state.processing_done = False
+          st.session_state.batch_awaiting_gate = True
+          st.session_state.batch_run_group = False
+          st.session_state.batch_gate_decision = None
+          st.rerun()
+
+    except Exception as e:
+      status_area.error(f"Error reading file: {e}")
+
+# --- 8b-flat. Flat mode runner ---
+if (st.session_state.batch_pending and uploaded_file is not None
+    and st.session_state.batch_mode == "Single Session"):
   st.session_state.batch_pending = False
 
   row_user_id = st.session_state.generated_user_id
@@ -2569,6 +2688,7 @@ if st.session_state.batch_pending and uploaded_file is not None:
           "Dimensions": _clean_dd(st.session_state.get("dd1", "")),
           "Testing Topics": _clean_dd(st.session_state.get("dd2", "")),
           "Testing Category": _clean_dd(st.session_state.get("dd3", "")),
+          "Prompt id": "",
           "Turn id": turn,
           "Perturb-Tech": _clean_dd(st.session_state.get("dd4", "")),
           "Use Case": _clean_dd(st.session_state.get("dd5", "")),
@@ -2601,3 +2721,179 @@ if st.session_state.batch_pending and uploaded_file is not None:
   except Exception as e:
     st.session_state.is_processing = False
     status_area.error(f"Error: {e}")
+
+# --- 8c. Gate: paused before a new conversation, waiting for your decision ---
+if st.session_state.is_processing and st.session_state.batch_awaiting_gate:
+  groups = st.session_state.batch_groups
+  idx = st.session_state.batch_group_idx
+
+  if idx >= len(groups):
+    st.session_state.is_processing = False
+    st.session_state.processing_done = True
+    st.session_state.batch_awaiting_gate = False
+    status_area.success("✅ Batch Complete!")
+    st.rerun()
+  else:
+    grp = groups[idx]
+    pid = grp["pid"]
+    sheet_turn1 = grp["turns"][0]["prompt"] if grp["turns"] else ""
+    n_turns = len(grp["turns"])
+
+    status_area.info(f"Paused at conversation {idx + 1}/{len(groups)} (prompt id {pid})")
+    progress_bar.progress(int((idx / len(groups)) * 100))
+
+    gate = st.container(border=True)
+    with gate:
+      st.markdown(f"### 🚦 New session — conversation `{pid}` ({n_turns} turn(s))")
+      st.caption("Sheet's turn 1:")
+      turn1_edit = st.text_area(
+        "Turn 1 text (editable — used only if you Keep it)",
+        value=sheet_turn1,
+        key=f"gate_turn1_{idx}",
+        height=90,
+      )
+      primer = st.text_input(
+        "Primer to send & drop (used only for 'Send primer & drop')",
+        value="Hi",
+        key=f"gate_primer_{idx}",
+      )
+
+      c1, c2, c3 = st.columns(3)
+      keep_clicked = c1.button("✅ Keep as turn 1", use_container_width=True, type="primary", key=f"gate_keep_{idx}")
+      primer_clicked = c2.button("↩️ Send primer & drop", use_container_width=True, key=f"gate_primer_btn_{idx}")
+      skip_clicked = c3.button("⏭️ Skip session", use_container_width=True, key=f"gate_skip_{idx}")
+
+      st.caption(
+        "**Keep** = send the (edited) turn-1 text and record it as turn 1.  "
+        "**Send primer & drop** = send your primer to pull the greeting, discard it, "
+        "then send the sheet's turn 1 as the recorded turn 1.  "
+        "**Skip** = drop this whole conversation."
+      )
+
+      if keep_clicked:
+        st.session_state.batch_gate_decision = "keep"
+        st.session_state.batch_gate_turn1_text = turn1_edit
+        st.session_state.batch_awaiting_gate = False
+        st.session_state.batch_run_group = True
+        st.rerun()
+      elif primer_clicked:
+        if not primer.strip():
+          st.warning("Type a primer message first (it will be sent and dropped).")
+        else:
+          st.session_state.batch_gate_decision = "primer"
+          st.session_state.batch_primer_text = primer.strip()
+          st.session_state.batch_awaiting_gate = False
+          st.session_state.batch_run_group = True
+          st.rerun()
+      elif skip_clicked:
+        st.session_state.batch_gate_decision = "skip"
+        st.session_state.batch_awaiting_gate = False
+        st.session_state.batch_run_group = True
+        st.rerun()
+
+# --- 8d. Run one conversation automatically, then halt at the next gate ---
+if st.session_state.is_processing and st.session_state.batch_run_group:
+  st.session_state.batch_run_group = False
+
+  groups = st.session_state.batch_groups
+  idx = st.session_state.batch_group_idx
+  grp = groups[idx]
+  pid = grp["pid"]
+  decision = st.session_state.batch_gate_decision
+  batch_prefix = prefix_input.strip() if prefix_input.strip() else "U"
+
+  if decision == "skip":
+    status_area.warning(f"Skipped conversation {pid}.")
+  else:
+    # Fresh IDs per conversation. dev's User/Session ID fields are editable
+    # text_inputs and can't be rewritten mid-run, so the active IDs are shown
+    # via status_area and recorded on every exported row instead.
+    conv_user_id = generate_short_month_id(f"{batch_prefix}_U")
+    conv_session_id = generate_short_month_id(f"{batch_prefix}_S")
+
+    # Primer mode: send an opener to pull the greeting, then DROP it (no record, no history).
+    if decision == "primer":
+      status_area.info(f"Conversation {pid}: sending primer (dropped)…")
+      _ = call_model(st.session_state.batch_primer_text, conv_user_id, conv_session_id)
+      time.sleep(0.2)
+
+    turns = grp["turns"]
+    total_turns = len(turns)
+    for i, t in enumerate(turns):
+      # In 'keep' mode the first turn uses the edited text; otherwise the sheet text.
+      send_text = st.session_state.batch_gate_turn1_text if (decision == "keep" and i == 0) else t["prompt"]
+      tid = t["turn id"]
+      turn = len(st.session_state.chat_history) + 1
+      verdict_idx = turn - 1
+
+      with chat_container:
+        with st.chat_message("user", avatar="📄"):
+          st.write(send_text)
+        with st.chat_message("assistant", avatar="🤖"):
+          with st.spinner("Violet is thinking..."):
+            resp, latency_ms, timing_details = call_model(send_text, conv_user_id, conv_session_id)
+          if resp.strip():
+            st.write(resp)
+          else:
+            st.warning("⚠️ No response received")
+          st.markdown(latency_badge(latency_ms, tid, timing_details), unsafe_allow_html=True)
+          if resp.strip():
+            current = st.session_state.verdicts.get(verdict_idx, "")
+            cols = st.columns(len(_verdict_options))
+            for col, opt in zip(cols, _verdict_options):
+              col.button(
+                opt,
+                key=f"v_{turn}_{opt}",
+                type="primary" if current == opt else "secondary",
+                use_container_width=True,
+                disabled=True,
+                help="⚠️ Batch is still running — select verdicts once it completes.",
+              )
+
+      st.session_state.results.append({
+        "Source": "csv",
+        "Dimensions": _clean_dd(st.session_state.get("dd1", "")),
+        "Testing Topics": _clean_dd(st.session_state.get("dd2", "")),
+        "Testing Category": _clean_dd(st.session_state.get("dd3", "")),
+        "Prompt id": pid,
+        "Turn id": tid,
+        "Perturb-Tech": _clean_dd(st.session_state.get("dd4", "")),
+        "Use Case": _clean_dd(st.session_state.get("dd5", "")),
+        "User Id": conv_user_id,
+        "Session Id": conv_session_id,
+        "Prompt": send_text,
+        "Response": resp if resp.strip() else "[BLANK]",
+        "Latency": round(latency_ms / 1000, 2),
+        "Time Details": " | ".join(f"{k}: {v}" for k, v in timing_details.items() if v is not None) if timing_details else "",
+      })
+      st.session_state.chat_history.append({
+        "type": "batch",
+        "gidx": idx,
+        "user_id": conv_user_id,
+        "session_id": conv_session_id,
+        "source": "csv",
+        "prompt id": pid,
+        "turn id": tid,
+        "prompt": send_text,
+        "response": resp,
+        "latency_ms": latency_ms,
+        "timing_details": timing_details,
+      })
+
+      status_area.info(
+        f"Conversation {pid} · turn {tid}  |  {i + 1}/{total_turns} in this session  "
+        f"|  IDs {conv_user_id} / {conv_session_id}  |  Last: {latency_ms/1000:.2f}s"
+      )
+      time.sleep(0.2)
+
+  # Advance to the next conversation (or finish)
+  st.session_state.batch_group_idx += 1
+  st.session_state.batch_gate_decision = None
+  if st.session_state.batch_group_idx < len(groups):
+    st.session_state.batch_awaiting_gate = True
+  else:
+    st.session_state.is_processing = False
+    st.session_state.processing_done = True
+    progress_bar.progress(100)
+    status_area.success("✅ Batch Complete!")
+  st.rerun()
